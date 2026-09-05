@@ -860,27 +860,149 @@ export function attachSectionEvents() {
     }
 
 
+    window.closeConfirmMasterImportModal = function() {
+        const modal = document.getElementById('confirmMasterImportModal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+        const input = document.getElementById('xlsxImportInput');
+        if (input) input.value = '';
+    };
+
+    let pendingImportFile = null;
+
     if (xlsxImportInput) {
+        xlsxImportInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        xlsxImportInput.addEventListener(
-            'change',
-            e => {
+            pendingImportFile = file;
 
-                const file =
-                    e.target.files[0];
-
-                if (!file) {
-                    return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                let rows = [];
+                try {
+                    const data = new Uint8Array(evt.target.result);
+                    const XLSXLib = window.XLSX || (typeof XLSX !== 'undefined' ? XLSX : null);
+                    if (XLSXLib) {
+                        const workbook = XLSXLib.read(data, { type: 'array' });
+                        const sheetName = workbook.SheetNames[0];
+                        const sheet = workbook.Sheets[sheetName];
+                        rows = XLSXLib.utils.sheet_to_json(sheet, { header: 1 });
+                    }
+                } catch (err) {
+                    console.error("Preview parsing failed:", err);
                 }
+                showConfirmMasterImportModal(file, rows);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    }
 
+    function showConfirmMasterImportModal(file, rows) {
+        const modal = document.getElementById('confirmMasterImportModal');
+        const fileNameEl = document.getElementById('confirmImportFileName');
+        const fileSizeEl = document.getElementById('confirmImportFileSize');
+        const recordCountEl = document.getElementById('confirmImportRecordCount');
+        const tbody = document.getElementById('confirmImportPreviewTable');
+        const submitBtn = document.getElementById('confirmMasterImportSubmitBtn');
 
-                const formData =
-                    new FormData();
+        if (!modal || !fileNameEl || !fileSizeEl || !recordCountEl || !tbody) {
+            executeMasterListImport(file);
+            return;
+        }
 
-                formData.append(
-                    'file',
-                    file
-                );
+        fileNameEl.textContent = file.name;
+        fileNameEl.title = file.name;
+        fileSizeEl.textContent = (file.size / 1024).toFixed(1) + ' KB';
+
+        tbody.innerHTML = '';
+
+        let dataRows = [];
+        let headerIdx = -1;
+
+        if (rows && rows.length > 0) {
+            for (let r = 0; r < Math.min(5, rows.length); r++) {
+                const row = rows[r];
+                if (!row) continue;
+                const str = row.join(' ').toLowerCase();
+                if (str.includes('name') || str.includes('serial') || str.includes('surname') || str.includes('student')) {
+                    headerIdx = r;
+                    break;
+                }
+            }
+            if (headerIdx === -1) headerIdx = 0;
+
+            dataRows = rows.slice(headerIdx + 1).filter(r => r && r.length > 0 && r.some(c => c !== null && c !== ''));
+
+            const headerRow = rows[headerIdx] || [];
+            let nameIdx = -1, surnameIdx = -1, firstIdx = -1, serialIdx = -1, idIdx = -1, nstpIdx = -1, progIdx = -1;
+
+            headerRow.forEach((col, idx) => {
+                const val = String(col || '').toLowerCase();
+                if (val.includes('serial')) serialIdx = idx;
+                else if (val.includes('student') || val.includes('id') || val.includes('no')) idIdx = idx;
+
+                if (val.includes('surname') || val.includes('last')) surnameIdx = idx;
+                else if (val.includes('first')) firstIdx = idx;
+                else if (val.includes('name')) nameIdx = idx;
+
+                if (val.includes('nstp') || val.includes('component')) nstpIdx = idx;
+                else if (val.includes('program') || val.includes('course') || val.includes('main program')) progIdx = idx;
+            });
+
+            const previewRows = dataRows.slice(0, 5);
+
+            previewRows.forEach((r, index) => {
+                let serialOrId = (serialIdx !== -1 ? r[serialIdx] : '') || (idIdx !== -1 ? r[idIdx] : '') || 'N/A';
+                let fullName = '';
+                if (surnameIdx !== -1 || firstIdx !== -1) {
+                    const surname = surnameIdx !== -1 ? (r[surnameIdx] || '') : '';
+                    const firstname = firstIdx !== -1 ? (r[firstIdx] || '') : '';
+                    fullName = surname ? `${surname}, ${firstname}` : firstname;
+                } else if (nameIdx !== -1) {
+                    fullName = r[nameIdx] || '';
+                }
+                if (!fullName) fullName = 'N/A';
+
+                let prog = progIdx !== -1 ? (r[progIdx] || 'N/A') : 'N/A';
+                let nstp = nstpIdx !== -1 ? (r[nstpIdx] || 'CWTS') : 'CWTS';
+
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-50 transition';
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 font-semibold text-slate-400">${index + 1}</td>
+                    <td class="py-2.5 px-3 font-mono font-medium text-slate-700">${serialOrId}</td>
+                    <td class="py-2.5 px-3 font-bold text-slate-800">${fullName}</td>
+                    <td class="py-2.5 px-3 text-slate-600 truncate max-w-[150px]">${prog}</td>
+                    <td class="py-2.5 px-3"><span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">${nstp}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        if (dataRows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400 text-xs">No student records parsed from file</td></tr>';
+        }
+
+        recordCountEl.textContent = `${dataRows.length} Student Records`;
+
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        submitBtn.onclick = function() {
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            executeMasterListImport(file);
+        };
+    }
+
+    function executeMasterListImport(file) {
+        if (!file) return;
+
+        const formData = new FormData();
+        formData.append('file', file);
 
 
                 // =================================================
@@ -1181,9 +1303,6 @@ export function attachSectionEvents() {
                         false;
 
                 });
-
-            }
-        );
 
     }
 }

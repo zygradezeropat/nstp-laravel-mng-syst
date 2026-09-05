@@ -103,11 +103,7 @@
                 </td>
                 <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
                     <button onclick="openEditStudentModal('{{ $s->db_id }}', '{{ $s->id }}', '{{ addslashes($s->name) }}', '{{ $s->email }}', '{{ $s->course }}', '{{ $s->status }}', '{{ $s->gender }}', '{{ $s->dob }}', '{{ addslashes($s->birth_place) }}', '{{ $s->cell_no }}', '{{ addslashes($s->address) }}', '{{ $s->final_grade }}')" class="text-slate-400 hover:text-indigo-600 p-1 transition cursor-pointer" title="Edit Student Profile"><x-icon name="pencil" class="w-4 h-4" /></button>
-                    <form action="{{ route('coordinator.sections.remove_student', [$section->section_name, $s->db_id]) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete student {{ $s->name }} ({{ $s->id }})? This will soft-delete their profile and remove their enrollment record from {{ $section->section_name }}.')">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Student"><x-icon name="trash" class="w-4 h-4" /></button>
-                    </form>
+                    <button type="button" onclick="openDeleteStudentModal('{{ $s->db_id }}', '{{ addslashes($s->name) }}', '{{ $s->id }}')" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Student"><x-icon name="trash" class="w-4 h-4" /></button>
                 </td>
             </tr>
             @empty
@@ -210,8 +206,58 @@
     </div>
 </div>
 
+<!-- Delete Student Confirmation Modal -->
+<div id="deleteStudentOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteStudentModalContainer">
+        <form id="deleteStudentForm" method="POST" action="">
+            @csrf
+            @method('DELETE')
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <x-icon name="trash" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">Delete Student Record</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    Are you sure you want to delete <span id="deleteStudentName" class="font-bold text-slate-800"></span> (<span id="deleteStudentId" class="font-semibold text-slate-700"></span>)? This will soft-delete their profile and remove their enrollment record from <span class="font-bold text-slate-800">{{ $section->section_name }}</span>.
+                </p>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                    <button type="button" onclick="closeDeleteStudentModal()" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-sm hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                        Delete Record
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 @push('scripts')
     <script>
+        window.openDeleteStudentModal = function(db_id, name, student_id) {
+            const overlay = document.getElementById('deleteStudentOverlay');
+            const form = document.getElementById('deleteStudentForm');
+            const nameSpan = document.getElementById('deleteStudentName');
+            const idSpan = document.getElementById('deleteStudentId');
+
+            if (!overlay || !form || !nameSpan || !idSpan) return;
+
+            form.action = "{{ route('coordinator.sections.remove_student', [$section->section_name, ':id']) }}".replace(':id', db_id);
+            nameSpan.textContent = name;
+            idSpan.textContent = student_id;
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        };
+
+        window.closeDeleteStudentModal = function() {
+            const overlay = document.getElementById('deleteStudentOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        };
         window.openEditStudentModal = function(db_id, student_no, name, email, course, status, gender, dob, birth_place, cell_no, address, final_grade) {
             const form = document.getElementById('editStudentForm');
             form.action = "{{ route('coordinator.sections.update_student', [$section->section_name, ':id']) }}".replace(':id', db_id);

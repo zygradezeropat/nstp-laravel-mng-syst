@@ -29,98 +29,297 @@
 </div>
 @endif
 
-<x-page-header title="Sections Management" subtitle="Manage CWTS, LTS, and ROTC classes and student enrollments">
+<x-page-header title="Sections & Students" subtitle="Manage CWTS, LTS, and ROTC classes and master student database">
     <x-slot name="actions">
-        <input type="file" id="xlsxImportInput" accept=".xlsx,.xls,.csv" class="hidden" />
-        <button id="importXlsxBtn" class="inline-flex items-center gap-1.5 px-3 py-2 text-sm rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition mr-2">
-            <x-icon name="upload" class="w-4 h-4" /> Import Master List XLSX File
-        </button>
-        <button onclick="document.getElementById('newSectionOverlay').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition">
-            <x-icon name="plus" class="w-4 h-4" /> New Section
-        </button>
+        <div class="flex items-center gap-3">
+            <!-- Tab Navigation Switcher -->
+            <div class="inline-flex p-1 bg-slate-100/90 border border-slate-200/80 rounded-xl space-x-1">
+                <button type="button" id="tabBtnSections" onclick="switchMainTab('sections')" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm bg-white text-indigo-600 cursor-pointer">
+                    Sections
+                </button>
+                <button type="button" id="tabBtnMasterlist" onclick="switchMainTab('masterlist')" class="px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 cursor-pointer">
+                    Masterlist
+                </button>
+            </div>
+
+            <input type="file" id="xlsxImportInput" accept=".xlsx,.xls,.csv" class="hidden" />
+
+            <!-- Action Button for Sections Tab -->
+            <button id="actionBtnNewSection" onclick="document.getElementById('newSectionOverlay').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
+                <x-icon name="plus" class="w-4 h-4" /> New Section
+            </button>
+
+            <!-- Action Button for Masterlist Tab (Moved per instructions) -->
+            <button id="importXlsxBtn" class="hidden inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition shadow-sm cursor-pointer">
+                <x-icon name="upload" class="w-4 h-4" /> Import Master List XLSX File
+            </button>
+        </div>
     </x-slot>
 </x-page-header>
 
-<div class="grid grid-cols-1 md:grid-cols-3 gap-5 mt-6 mb-6">
-    @foreach($progDefs as $p)
-        <button data-program-filter="{{ $p['key'] }}" class="bg-white rounded-2xl p-5 shadow-sm text-left transition-all border border-slate-100 hover:border-slate-300 hover:shadow-md cursor-pointer w-full">
-            <div class="flex items-center gap-3 mb-4">
-                <div class="w-10 h-10 rounded-full {{ $p['color'] }} text-white flex items-center justify-center text-base font-bold shrink-0">{{ $p['letter'] }}</div>
-                <div>
-                    <div class="text-slate-900 font-semibold tracking-tight">{{ $p['label'] }}</div>
-                    <div class="text-xs text-slate-500">{{ $p['full'] }}</div>
-                </div>
-            </div>
-            <div class="space-y-3">
-                <div>
-                    <div class="flex items-center justify-between text-sm mb-1">
-                        <span class="text-slate-500">Students</span>
-                        <span class="text-slate-700 font-medium">{{ $p['studentCount'] }} / {{ $p['maxStudents'] }}</span>
+<!-- ========================================================================= -->
+<!-- SECTIONS TAB CONTENT -->
+<!-- ========================================================================= -->
+<div id="sectionsTabContent" class="space-y-6 mt-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        @foreach($progDefs as $p)
+            <button data-program-filter="{{ $p['key'] }}" class="bg-white rounded-2xl p-5 shadow-sm text-left transition-all border border-slate-100 hover:border-slate-300 hover:shadow-md cursor-pointer w-full">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-10 h-10 rounded-full {{ $p['color'] }} text-white flex items-center justify-center text-base font-bold shrink-0">{{ $p['letter'] }}</div>
+                    <div>
+                        <div class="text-slate-900 font-semibold tracking-tight">{{ $p['label'] }}</div>
+                        <div class="text-xs text-slate-500">{{ $p['full'] }}</div>
                     </div>
-                    <div class="w-full bg-slate-100 rounded-full h-1.5"><div class="{{ $p['bar'] }} h-1.5 rounded-full" style="width: {{ $p['percent'] }}%"></div></div>
                 </div>
-                <div class="text-xs text-slate-500 flex items-center justify-between">
-                    <span>{{ $p['sectionCount'] }} {{ Str::plural('Section', $p['sectionCount']) }}</span>
-                    <span>{{ $p['percent'] }}% Capacity</span>
+                <div class="space-y-3">
+                    <div>
+                        <div class="flex items-center justify-between text-sm mb-1">
+                            <span class="text-slate-500">Students</span>
+                            <span class="text-slate-700 font-medium">{{ $p['studentCount'] }} / {{ $p['maxStudents'] }}</span>
+                        </div>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5"><div class="{{ $p['bar'] }} h-1.5 rounded-full" style="width: {{ $p['percent'] }}%"></div></div>
+                    </div>
+                    <div class="text-xs text-slate-500 flex items-center justify-between">
+                        <span>{{ $p['sectionCount'] }} {{ Str::plural('Section', $p['sectionCount']) }}</span>
+                        <span>{{ $p['percent'] }}% Capacity</span>
+                    </div>
                 </div>
+            </button>
+        @endforeach
+    </div>
+
+    <x-card title="All Sections">
+        <x-table>
+            <x-slot name="header">
+                <th class="py-2 px-3 font-medium">Section</th>
+                <th class="py-2 px-3 font-medium">Program</th>
+                <th class="py-2 px-3 font-medium">School Year</th>
+                <th class="py-2 px-3 font-medium">Students</th>
+                <th class="py-2 px-3 font-medium">Instructor</th>
+                <th class="py-2 px-3 font-medium">Room</th>
+                <th class="py-2 px-3 font-medium">Semester</th>
+                <th class="py-2 px-3 font-medium text-right">Actions</th>
+            </x-slot>
+
+            @forelse($sections as $r)
+            <tr class="border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition" data-program="{{ $r->program }}" onclick="window.location.href='{{ route('coordinator.section_students', $r->code) }}'">
+                <td class="py-3 px-3 text-slate-900 font-medium">{{ $r->code }}</td>
+                <td class="py-3 px-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full font-semibold {{ $r->program === 'CWTS' ? 'bg-indigo-50 text-indigo-700' : ($r->program === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700') }}">
+                        {{ $r->program }}
+                    </span>
+                </td>
+                <td class="py-3 px-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full {{ $r->schoolYear === '2025-2026' ? 'bg-violet-50 text-violet-700' : 'bg-rose-50 text-rose-700' }}">
+                        {{ $r->schoolYear }}
+                    </span>
+                </td>
+                <td class="py-3 px-3 text-slate-700 font-medium">{{ $r->students }}</td>
+                <td class="py-3 px-3 text-slate-700">{{ $r->instructor }}</td>
+                <td class="py-3 px-3 text-slate-700">{{ $r->room }}</td>
+                <td class="py-3 px-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full {{ str_contains(strtolower($r->semester), '1st') ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700' }}">
+                        {{ $r->semester }}
+                    </span>
+                </td>
+                <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
+                    <button onclick="openEditSectionModal('{{ $r->id }}', '{{ $r->code }}', '{{ $r->program }}', '{{ $r->schoolYear }}', '{{ $r->room }}', '{{ $r->instructor }}', '{{ $r->semester }}')" class="text-slate-400 hover:text-indigo-600 p-1 transition cursor-pointer" title="Edit Section"><x-icon name="pencil" class="w-4 h-4" /></button>
+                    <button type="button" onclick="openDeleteSectionModal('{{ $r->id }}', '{{ addslashes($r->code) }}')" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Section"><x-icon name="trash" class="w-4 h-4" /></button>
+                </td>
+            </tr>
+            @empty
+            <tr><td colspan="8" class="py-8 text-center text-slate-400 text-sm">No sections found.</td></tr>
+            @endforelse
+        </x-table>
+        @if($sections->hasPages())
+            <div class="mt-4 px-4 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
+                {{ $sections->links() }}
             </div>
-        </button>
-    @endforeach
+        @endif
+    </x-card>
 </div>
 
-<x-card title="All Sections">
-    <x-table>
-        <x-slot name="header">
-            <th class="py-2 px-3 font-medium">Section</th>
-            <th class="py-2 px-3 font-medium">Program</th>
-            <th class="py-2 px-3 font-medium">School Year</th>
-            <th class="py-2 px-3 font-medium">Students</th>
-            <th class="py-2 px-3 font-medium">Instructor</th>
-            <th class="py-2 px-3 font-medium">Room</th>
-            <th class="py-2 px-3 font-medium">Semester</th>
-            <th class="py-2 px-3 font-medium text-right">Actions</th>
-        </x-slot>
-
-        @forelse($sections as $r)
-        <tr class="border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition" data-program="{{ $r->program }}" onclick="window.location.href='{{ route('coordinator.section_students', $r->code) }}'">
-            <td class="py-3 px-3 text-slate-900">{{ $r->code }}</td>
-            <td class="py-3 px-3">
-                <span class="text-xs px-2 py-0.5 rounded-full {{ $r->program === 'CWTS' ? 'bg-indigo-50 text-indigo-700' : ($r->program === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700') }}">
-                    {{ $r->program }}
-                </span>
-            </td>
-            <td class="py-3 px-3">
-                <span class="text-xs px-2 py-0.5 rounded-full {{ $r->schoolYear === '2025-2026' ? 'bg-violet-50 text-violet-700' : 'bg-rose-50 text-rose-700' }}">
-                    {{ $r->schoolYear }}
-                </span>
-            </td>
-            <td class="py-3 px-3 text-slate-700">{{ $r->students }}</td>
-            <td class="py-3 px-3 text-slate-700">{{ $r->instructor }}</td>
-            <td class="py-3 px-3 text-slate-700">{{ $r->room }}</td>
-            <td class="py-3 px-3">
-                <span class="text-xs px-2 py-0.5 rounded-full {{ str_contains(strtolower($r->semester), '1st') ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700' }}">
-                    {{ $r->semester }}
-                </span>
-            </td>
-            <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
-                <button onclick="openEditSectionModal('{{ $r->id }}', '{{ $r->code }}', '{{ $r->program }}', '{{ $r->schoolYear }}', '{{ $r->room }}', '{{ $r->instructor }}', '{{ $r->semester }}')" class="text-slate-400 hover:text-indigo-600 p-1 transition cursor-pointer" title="Edit Section"><x-icon name="pencil" class="w-4 h-4" /></button>
-                <form action="{{ route('coordinator.sections.delete', $r->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete section {{ $r->code }}? This will permanently delete the section.')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Section"><x-icon name="trash" class="w-4 h-4" /></button>
-                </form>
-            </td>
-        </tr>
-        @empty
-        <tr><td colspan="8" class="py-8 text-center text-slate-400 text-sm">No sections found.</td></tr>
-        @endforelse
-    </x-table>
-    @if($sections->hasPages())
-        <div class="mt-4 px-4 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl">
-            {{ $sections->links() }}
+<!-- ========================================================================= -->
+<!-- MASTERLIST TAB CONTENT -->
+<!-- ========================================================================= -->
+<div id="masterlistTabContent" class="hidden space-y-6 mt-6">
+    <div class="flex items-center justify-between">
+        <div>
+            <h2 class="text-xl font-bold text-slate-800 tracking-tight">Masterlist</h2>
+            <p class="text-xs text-slate-500 mt-0.5">View and manage all NSTP students</p>
         </div>
-    @endif
-</x-card>
+        <div id="masterlistResultCountBadge" class="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+            Showing {{ count($masterStudents) }} students
+        </div>
+    </div>
+
+    <!-- Multi-Filter & Search Bar -->
+    <div class="bg-white rounded-2xl p-5 border border-slate-100 shadow-sm space-y-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-3">
+            <!-- Search -->
+            <div class="md:col-span-2">
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Search Student</label>
+                <div class="relative">
+                    <input type="text" id="masterlistSearch" placeholder="Search Student ID, Serial No, or Name..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition" />
+                    <x-icon name="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
+                </div>
+            </div>
+
+            <!-- Program Filter -->
+            <div>
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Program</label>
+                <select id="masterlistProgFilter" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition cursor-pointer">
+                    <option value="">All Programs</option>
+                    <option value="CWTS">CWTS</option>
+                    <option value="LTS">LTS</option>
+                    <option value="ROTC">ROTC</option>
+                </select>
+            </div>
+
+            <!-- Section Filter -->
+            <div>
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Section</label>
+                <select id="masterlistSecFilter" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition cursor-pointer">
+                    <option value="">All Sections</option>
+                    @foreach($allSectionsList as $secCode)
+                        <option value="{{ $secCode }}">{{ $secCode }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <!-- School Year Filter -->
+            <div>
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">School Year</label>
+                <select id="masterlistSyFilter" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition cursor-pointer">
+                    <option value="">All School Years</option>
+                    @foreach($schoolYearsList as $sy)
+                        <option value="{{ $sy }}">{{ $sy }}</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <!-- Year Level Filter -->
+            <div>
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Year Level</label>
+                <select id="masterlistYlFilter" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition cursor-pointer">
+                    <option value="">All Year Levels</option>
+                    <option value="1st Year">1st Year</option>
+                    <option value="2nd Year">2nd Year</option>
+                    <option value="3rd Year">3rd Year</option>
+                    <option value="4th Year">4th Year</option>
+                </select>
+            </div>
+
+            <!-- Status Filter -->
+            <div>
+                <label class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Status</label>
+                <select id="masterlistStatusFilter" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 transition cursor-pointer">
+                    <option value="">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Passed">Passed</option>
+                    <option value="Failed">Failed</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Dropped">Dropped</option>
+                    <option value="Completed">Completed</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Masterlist Students Table -->
+    <x-card title="Masterlist Student Database">
+        <x-table>
+            <x-slot name="header">
+                <th class="py-2 px-3 font-medium">Student ID</th>
+                <th class="py-2 px-3 font-medium">Serial No</th>
+                <th class="py-2 px-3 font-medium">Student Name</th>
+                <th class="py-2 px-3 font-medium">Program</th>
+                <th class="py-2 px-3 font-medium">Section</th>
+                <th class="py-2 px-3 font-medium">School Year</th>
+                <th class="py-2 px-3 font-medium">Year Level</th>
+                <th class="py-2 px-3 font-medium">Status</th>
+            </x-slot>
+
+            @forelse($masterStudents as $stu)
+            <tr class="masterlist-row border-b border-slate-50 hover:bg-indigo-50/30 transition"
+                data-student-id="{{ strtolower($stu->student_id) }}"
+                data-serial-no="{{ strtolower($stu->serial_no) }}"
+                data-name="{{ strtolower($stu->name) }}"
+                data-program="{{ $stu->program }}"
+                data-section="{{ $stu->section }}"
+                data-sy="{{ $stu->school_year }}"
+                data-yl="{{ $stu->year_level }}"
+                data-status="{{ strtolower($stu->status) }}">
+                
+                <td class="py-3 px-3 font-mono text-xs font-semibold text-slate-700">
+                    {{ $stu->student_id !== 'N/A' ? $stu->student_id : '—' }}
+                </td>
+                <td class="py-3 px-3 font-mono text-xs font-medium text-slate-600">
+                    {{ $stu->serial_no !== 'N/A' ? $stu->serial_no : '—' }}
+                </td>
+                <td class="py-3 px-3 font-bold text-slate-800">{{ $stu->name }}</td>
+                <td class="py-3 px-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full font-semibold {{ $stu->program === 'CWTS' ? 'bg-indigo-50 text-indigo-700' : ($stu->program === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700') }}">
+                        {{ $stu->program }}
+                    </span>
+                </td>
+                <td class="py-3 px-3 text-slate-700 font-medium">{{ $stu->section }}</td>
+                <td class="py-3 px-3">
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 font-medium">
+                        {{ $stu->school_year }}
+                    </span>
+                </td>
+                <td class="py-3 px-3 text-slate-600 text-xs">{{ $stu->year_level }}</td>
+                <td class="py-3 px-3">
+                    @php
+                        $st = strtolower($stu->status);
+                        $statusClass = 'bg-slate-100 text-slate-600 border-slate-200';
+                        if (in_array($st, ['active', 'passed', 'completed'])) {
+                            $statusClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                        } elseif (in_array($st, ['failed', 'dropped'])) {
+                            $statusClass = 'bg-rose-50 text-rose-700 border-rose-200';
+                        } elseif ($st === 'pending') {
+                            $statusClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                        }
+                    @endphp
+                    <span class="text-xs px-2.5 py-0.5 rounded-full border font-semibold {{ $statusClass }}">
+                        {{ ucfirst($stu->status) }}
+                    </span>
+                </td>
+            </tr>
+            @empty
+            <tr id="masterlistEmptyRow"><td colspan="8" class="py-8 text-center text-slate-400 text-sm">No masterlist students found in database.</td></tr>
+            @endforelse
+        </x-table>
+
+        <!-- Masterlist Pagination Bar -->
+        <div id="masterlistPaginationContainer" class="mt-4 px-4 py-3 border-t border-slate-100 bg-slate-50/50 rounded-b-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+            <div id="masterlistPaginationInfo" class="text-slate-500 font-medium">
+                Showing 1 to 10 of {{ count($masterStudents) }} students
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" id="masterlistPrevBtn" onclick="changeMasterlistPage(-1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition cursor-pointer">
+                    Previous
+                </button>
+                <span id="masterlistPageIndicator" class="font-bold text-slate-700 px-2">
+                    Page 1 of 1
+                </span>
+                <button type="button" id="masterlistNextBtn" onclick="changeMasterlistPage(1)" class="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed font-medium transition cursor-pointer">
+                    Next
+                </button>
+            </div>
+        </div>
+
+        <!-- Professional Empty State for Filter Matches -->
+        <div id="masterlistFilterEmptyState" class="hidden text-center py-12 px-4 bg-white rounded-2xl border border-slate-100 shadow-sm my-4">
+            <div class="w-12 h-12 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                <x-icon name="alertc" class="w-6 h-6" />
+            </div>
+            <h3 class="text-base font-bold text-slate-800">No students found</h3>
+            <p class="text-xs text-slate-500 mt-1 max-w-sm mx-auto">Try adjusting your search or filters to find student records.</p>
+        </div>
+    </x-card>
+</div>
 
 <!-- New Section Modal -->
 <div id="newSectionOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
@@ -341,13 +540,295 @@
 
         </div>
 
+</div>
+</div>
+
+<!-- Delete Section Confirmation Modal -->
+<div id="deleteSectionOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteSectionModalContainer">
+        <form id="deleteSectionForm" method="POST" action="">
+            @csrf
+            @method('DELETE')
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <x-icon name="trash" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">Delete Section</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    Are you sure you want to delete section <span id="deleteSectionCode" class="font-bold text-slate-800"></span>? This will permanently delete the section.
+                </p>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                    <button type="button" onclick="closeDeleteSectionModal()" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-sm hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                        Delete Section
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Master List Import Confirmation Preview Modal -->
+<div id="confirmMasterImportModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-2xl mx-4 overflow-hidden flex flex-col max-h-[90vh]" id="confirmMasterImportContainer">
+        
+        <!-- Modal Header -->
+        <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <x-icon name="upload" class="w-5 h-5" />
+                </div>
+                <div>
+                    <h3 class="text-lg font-bold text-slate-800">Confirm Master List Import</h3>
+                    <p class="text-xs text-slate-500 mt-0.5">Please review the file summary before importing to the database.</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeConfirmMasterImportModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+                <x-icon name="close" class="w-4 h-4" />
+            </button>
+        </div>
+
+        <!-- Modal Content -->
+        <div class="p-6 overflow-y-auto space-y-5 text-sm">
+            <!-- File Info Summary Badges -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 rounded-xl bg-slate-50 border border-slate-200/80">
+                <div class="overflow-hidden">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Selected File</span>
+                    <span id="confirmImportFileName" class="font-bold text-slate-800 text-xs sm:text-sm truncate block" title="">-</span>
+                </div>
+                <div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">File Size</span>
+                    <span id="confirmImportFileSize" class="font-semibold text-slate-700 text-xs sm:text-sm block">-</span>
+                </div>
+                <div>
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 block mb-0.5">Records Found</span>
+                    <span id="confirmImportRecordCount" class="font-extrabold text-emerald-700 text-xs sm:text-sm block">0 Students</span>
+                </div>
+            </div>
+
+            <!-- Record Preview Table -->
+            <div>
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-600">File Records Preview (First 5 Rows)</span>
+                    <span class="text-xs text-slate-400">Verifying columns and rows</span>
+                </div>
+
+                <div class="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-inner">
+                    <table class="w-full text-xs text-left">
+                        <thead class="bg-slate-100 text-slate-600 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="py-2.5 px-3">#</th>
+                                <th class="py-2.5 px-3">Student / Serial No</th>
+                                <th class="py-2.5 px-3">Full Name</th>
+                                <th class="py-2.5 px-3">Program</th>
+                                <th class="py-2.5 px-3">NSTP</th>
+                            </tr>
+                        </thead>
+                        <tbody id="confirmImportPreviewTable" class="divide-y divide-slate-100 text-slate-700">
+                            <!-- Rows injected dynamically via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Confirmation Notice -->
+            <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-start gap-2.5">
+                <x-icon name="check2" class="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div>
+                    <span class="font-bold">Ready to Import:</span> Click <strong>Confirm & Import Master List</strong> to write these records into the global database.
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-end gap-3 rounded-b-2xl">
+            <button type="button" onclick="closeConfirmMasterImportModal()" class="px-4 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="confirmMasterImportSubmitBtn" class="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition cursor-pointer">
+                <x-icon name="upload" class="w-4 h-4" /> Confirm & Import Master List
+            </button>
+        </div>
     </div>
 </div>
 
 @push('scripts')
     @vite(['resources/js/app.js'])
     <script>
+        window.switchMainTab = function(tabName) {
+            const sectionsContent = document.getElementById('sectionsTabContent');
+            const masterlistContent = document.getElementById('masterlistTabContent');
+            const btnSections = document.getElementById('tabBtnSections');
+            const btnMasterlist = document.getElementById('tabBtnMasterlist');
+            const actionNewSec = document.getElementById('actionBtnNewSection');
+            const actionImportXlsx = document.getElementById('importXlsxBtn');
+
+            if (tabName === 'sections') {
+                sectionsContent.classList.remove('hidden');
+                masterlistContent.classList.add('hidden');
+
+                btnSections.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm bg-white text-indigo-600 cursor-pointer";
+                btnMasterlist.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 cursor-pointer";
+
+                if (actionNewSec) actionNewSec.classList.remove('hidden');
+                if (actionImportXlsx) actionImportXlsx.classList.add('hidden');
+            } else {
+                sectionsContent.classList.add('hidden');
+                masterlistContent.classList.remove('hidden');
+
+                btnSections.className = "px-4 py-1.5 text-xs font-semibold rounded-lg transition-all text-slate-600 hover:text-slate-900 cursor-pointer";
+                btnMasterlist.className = "px-4 py-1.5 text-xs font-bold rounded-lg transition-all shadow-sm bg-white text-indigo-600 cursor-pointer";
+
+                if (actionNewSec) actionNewSec.classList.add('hidden');
+                if (actionImportXlsx) actionImportXlsx.classList.remove('hidden');
+            }
+        };
+
+        let currentMasterlistPage = 1;
+        const masterlistPageSize = 10;
+
+        window.changeMasterlistPage = function(delta) {
+            currentMasterlistPage += delta;
+            if (currentMasterlistPage < 1) currentMasterlistPage = 1;
+            if (window.renderMasterlistPage) {
+                window.renderMasterlistPage();
+            }
+        };
+
+        function initMasterlistFilterEngine() {
+            const searchInput = document.getElementById('masterlistSearch');
+            const progSelect = document.getElementById('masterlistProgFilter');
+            const secSelect = document.getElementById('masterlistSecFilter');
+            const sySelect = document.getElementById('masterlistSyFilter');
+            const ylSelect = document.getElementById('masterlistYlFilter');
+            const statusSelect = document.getElementById('masterlistStatusFilter');
+            const rows = document.querySelectorAll('.masterlist-row');
+            const emptyState = document.getElementById('masterlistFilterEmptyState');
+            const countBadge = document.getElementById('masterlistResultCountBadge');
+
+            const pagInfo = document.getElementById('masterlistPaginationInfo');
+            const pagIndicator = document.getElementById('masterlistPageIndicator');
+            const prevBtn = document.getElementById('masterlistPrevBtn');
+            const nextBtn = document.getElementById('masterlistNextBtn');
+            const pagContainer = document.getElementById('masterlistPaginationContainer');
+
+            function filterAndPaginate() {
+                const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+                const prog = progSelect ? progSelect.value : '';
+                const sec = secSelect ? secSelect.value : '';
+                const sy = sySelect ? sySelect.value : '';
+                const yl = ylSelect ? ylSelect.value : '';
+                const status = statusSelect ? statusSelect.value : '';
+
+                const matchingRows = [];
+
+                rows.forEach(r => {
+                    const rId = r.getAttribute('data-student-id') || '';
+                    const rSerial = r.getAttribute('data-serial-no') || '';
+                    const rName = r.getAttribute('data-name') || '';
+                    const rProg = r.getAttribute('data-program') || '';
+                    const rSec = r.getAttribute('data-section') || '';
+                    const rSy = r.getAttribute('data-sy') || '';
+                    const rYl = r.getAttribute('data-yl') || '';
+                    const rStatus = r.getAttribute('data-status') || '';
+
+                    const matchesSearch = !query || rId.includes(query) || rSerial.includes(query) || rName.includes(query);
+                    const matchesProg = !prog || rProg === prog;
+                    const matchesSec = !sec || rSec === sec;
+                    const matchesSy = !sy || rSy === sy;
+                    const matchesYl = !yl || rYl === yl;
+                    const matchesStatus = !status || rStatus.toLowerCase() === status.toLowerCase();
+
+                    if (matchesSearch && matchesProg && matchesSec && matchesSy && matchesYl && matchesStatus) {
+                        matchingRows.push(r);
+                    } else {
+                        r.classList.add('hidden');
+                    }
+                });
+
+                const totalMatching = matchingRows.length;
+                const totalPages = Math.max(1, Math.ceil(totalMatching / masterlistPageSize));
+
+                if (currentMasterlistPage > totalPages) {
+                    currentMasterlistPage = totalPages;
+                }
+                if (currentMasterlistPage < 1) {
+                    currentMasterlistPage = 1;
+                }
+
+                const startIndex = (currentMasterlistPage - 1) * masterlistPageSize;
+                const endIndex = startIndex + masterlistPageSize;
+
+                matchingRows.forEach((r, idx) => {
+                    if (idx >= startIndex && idx < endIndex) {
+                        r.classList.remove('hidden');
+                    } else {
+                        r.classList.add('hidden');
+                    }
+                });
+
+                if (countBadge) {
+                    countBadge.textContent = `Showing ${totalMatching} students`;
+                }
+
+                if (pagInfo) {
+                    if (totalMatching === 0) {
+                        pagInfo.textContent = `Showing 0 to 0 of 0 students`;
+                    } else {
+                        pagInfo.textContent = `Showing ${startIndex + 1} to ${Math.min(endIndex, totalMatching)} of ${totalMatching} students`;
+                    }
+                }
+
+                if (pagIndicator) {
+                    pagIndicator.textContent = `Page ${currentMasterlistPage} of ${totalPages}`;
+                }
+
+                if (prevBtn) {
+                    prevBtn.disabled = currentMasterlistPage <= 1;
+                }
+                if (nextBtn) {
+                    nextBtn.disabled = currentMasterlistPage >= totalPages || totalMatching === 0;
+                }
+
+                if (pagContainer) {
+                    if (totalMatching === 0) {
+                        pagContainer.classList.add('hidden');
+                    } else {
+                        pagContainer.classList.remove('hidden');
+                    }
+                }
+
+                if (emptyState) {
+                    if (totalMatching === 0 && rows.length > 0) {
+                        emptyState.classList.remove('hidden');
+                    } else {
+                        emptyState.classList.add('hidden');
+                    }
+                }
+            }
+
+            window.renderMasterlistPage = filterAndPaginate;
+
+            function onFilterChange() {
+                currentMasterlistPage = 1;
+                filterAndPaginate();
+            }
+
+            [searchInput, progSelect, secSelect, sySelect, ylSelect, statusSelect].forEach(el => {
+                if (el) {
+                    el.addEventListener('input', onFilterChange);
+                    el.addEventListener('change', onFilterChange);
+                }
+            });
+
+            filterAndPaginate();
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
+            initMasterlistFilterEngine();
+
             // Wait slightly for Vite to load app.js if it's deferred
             setTimeout(() => {
                 if (window.attachEvents) {
@@ -417,6 +898,39 @@
             }
 
             document.getElementById('editSectionOverlay').classList.remove('hidden');
+        };
+
+        // Delete Section Modal functions
+        window.openDeleteSectionModal = function(id, code) {
+            const overlay = document.getElementById('deleteSectionOverlay');
+            const form = document.getElementById('deleteSectionForm');
+            const codeSpan = document.getElementById('deleteSectionCode');
+
+            if (!overlay || !form || !codeSpan) return;
+
+            form.action = "{{ route('coordinator.sections.delete', ':id') }}".replace(':id', id);
+            codeSpan.textContent = code;
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        };
+
+        window.closeDeleteSectionModal = function() {
+            const overlay = document.getElementById('deleteSectionOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        };
+
+        window.closeConfirmMasterImportModal = function() {
+            const modal = document.getElementById('confirmMasterImportModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+            const input = document.getElementById('xlsxImportInput');
+            if (input) input.value = '';
         };
 
         // XLSX File Comparison Logic inside Add New Section Modal

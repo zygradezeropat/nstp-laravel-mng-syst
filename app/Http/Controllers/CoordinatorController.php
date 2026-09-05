@@ -151,7 +151,69 @@ class CoordinatorController extends Controller
 
         $instructors = PortalUser::where('role', 'instructor')->get();
 
-        return view('coordinator.sections', compact('sections', 'instructors', 'progDefs'));
+        // Fetch master student records for Masterlist tab
+        $masterStudents = \App\Models\Student::leftJoin('enrollments', 'students.id', '=', 'enrollments.student_id')
+            ->leftJoin('sections', 'enrollments.section_id', '=', 'sections.id')
+            ->select([
+                'students.id as db_id',
+                'students.student_id',
+                'students.serial_no',
+                'students.first_name',
+                'students.middle_name',
+                'students.last_name',
+                'students.course',
+                'students.year_level',
+                'students.component',
+                'students.enrollment_status',
+                'students.sex',
+                'students.email',
+                'sections.section_name',
+                'sections.school_year',
+                'enrollments.status as enrollment_status_override',
+            ])
+            ->orderBy('students.last_name')
+            ->get()
+            ->map(function ($s) {
+                $studentId = !empty($s->student_id) ? $s->student_id : 'N/A';
+                $serialNo  = !empty($s->serial_no) ? $s->serial_no : 'N/A';
+
+                $firstName = trim($s->first_name ?? '');
+                $middleName = trim($s->middle_name ?? '');
+                $lastName = trim($s->last_name ?? '');
+
+                if ($middleName && !str_ends_with(strtolower($firstName), strtolower($middleName))) {
+                    $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleName);
+                } else {
+                    $fullName = trim($lastName . ', ' . $firstName);
+                }
+
+                $status = $s->enrollment_status_override ?: ($s->enrollment_status ?: 'Active');
+                $yearLevelStr = $s->year_level ? ($s->year_level . (
+                    $s->year_level == 1 ? 'st' : ($s->year_level == 2 ? 'nd' : ($s->year_level == 3 ? 'rd' : 'th'))
+                ) . ' Year') : '1st Year';
+
+                return (object)[
+                    'db_id'        => $s->db_id,
+                    'student_id'   => $studentId,
+                    'serial_no'    => $serialNo,
+                    'name'         => $fullName,
+                    'course'       => $s->course ?: 'N/A',
+                    'program'      => $s->component ?: 'CWTS',
+                    'section'      => $s->section_name ?: 'Unassigned',
+                    'school_year'  => $s->school_year ?: '2025-2026',
+                    'year_level'   => $yearLevelStr,
+                    'status'       => $status,
+                    'email'        => $s->email ?: 'N/A',
+                ];
+            });
+
+        $allSectionsList = Section::orderBy('section_name')->pluck('section_name')->unique()->filter()->values()->toArray();
+        $schoolYearsList = Section::orderBy('school_year', 'desc')->pluck('school_year')->unique()->filter()->values()->toArray();
+        if (empty($schoolYearsList)) {
+            $schoolYearsList = ['2025-2026'];
+        }
+
+        return view('coordinator.sections', compact('sections', 'instructors', 'progDefs', 'masterStudents', 'allSectionsList', 'schoolYearsList'));
     }
 
     public function instructors()

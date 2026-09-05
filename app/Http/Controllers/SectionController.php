@@ -336,6 +336,24 @@ class SectionController extends Controller
                         $sNo
                     )->first();
 
+                    if (!$student) {
+                        $student = Student::where(
+                            'serial_no',
+                            $sNo
+                        )->first();
+                    }
+
+                    if (!$student && !empty($sName)) {
+                        $dbStudents = Student::all();
+                        $student = $dbStudents->first(function ($dbS) use ($sName) {
+                            return $this->studentNameMatches($dbS, $sName);
+                        });
+                    }
+
+                    if ($student && empty($student->student_id) && !empty($sNo) && !str_starts_with($sNo, 'STUDENT-')) {
+                        DB::table('students')->where('id', $student->id)->update(['student_id' => $sNo]);
+                        $student->student_id = $sNo;
+                    }
 
                     /*
                     |--------------------------------------------------------------------------
@@ -1198,13 +1216,26 @@ class SectionController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
+                if (empty($dbStudent->student_id) && !empty($sNo)) {
+                    DB::table('students')
+                        ->where('id', $dbStudent->id)
+                        ->update(['student_id' => $sNo]);
+                    $dbStudent->student_id = $sNo;
+                }
+
+                if (empty($dbStudent->course) && !empty($classListCourse)) {
+                    DB::table('students')
+                        ->where('id', $dbStudent->id)
+                        ->update(['course' => $classListCourse]);
+                    $dbStudent->course = $classListCourse;
+                }
+
                 $resolvedStudentId =
                     !empty($dbStudent->student_id)
                         ? $dbStudent->student_id
                         : (!empty($dbStudent->serial_no)
                             ? $dbStudent->serial_no
                             : ('STUDENT-' . $dbStudent->id));
-
 
                 /*
                 |--------------------------------------------------------------------------
@@ -1219,15 +1250,9 @@ class SectionController extends Controller
                 */
 
                 $resolvedCourse =
-                    !empty(
-                        $dbStudent->course
-                    )
-
-                    ? $this->normalizeCourse(
-                        $dbStudent->course
-                    )
-
-                    : $classListCourse;
+                    !empty($dbStudent->course)
+                        ? $this->normalizeCourse($dbStudent->course)
+                        : $classListCourse;
 
 
                 /*
