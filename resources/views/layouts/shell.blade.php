@@ -96,6 +96,88 @@
             </main>
         </div>
     </div>
+
+    <!-- Global Custom Alert Modal -->
+    <div id="globalAlertOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-all duration-300" onclick="if(event.target === this) closeGlobalAlertModal()">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-300 scale-100">
+            <div class="p-6 text-center">
+                <div id="globalAlertIconContainer" class="w-14 h-14 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-amber-100/50">
+                    <svg id="globalAlertIconWarning" class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                    <svg id="globalAlertIconError" class="w-7 h-7 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <svg id="globalAlertIconInfo" class="w-7 h-7 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <svg id="globalAlertIconSuccess" class="w-7 h-7 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 tracking-tight" id="globalAlertTitle">Notice</h3>
+                <p class="text-sm text-slate-500 mt-2 leading-relaxed" id="globalAlertMessage">Message</p>
+            </div>
+            <div class="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex justify-end">
+                <button type="button" onclick="closeGlobalAlertModal()" class="px-6 py-2.5 text-sm font-semibold rounded-xl bg-slate-900 text-white hover:bg-slate-800 active:scale-95 transition-all shadow-md shadow-slate-900/10 cursor-pointer">
+                    OK
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.showAlertModal = function(message, title = 'Notice', type = 'warning') {
+            const overlay = document.getElementById('globalAlertOverlay');
+            if (!overlay) {
+                console.warn(message);
+                return;
+            }
+            document.getElementById('globalAlertTitle').innerText = title || 'Notice';
+            document.getElementById('globalAlertMessage').innerText = message;
+
+            const iconContainer = document.getElementById('globalAlertIconContainer');
+            const iconWarning = document.getElementById('globalAlertIconWarning');
+            const iconError = document.getElementById('globalAlertIconError');
+            const iconInfo = document.getElementById('globalAlertIconInfo');
+            const iconSuccess = document.getElementById('globalAlertIconSuccess');
+
+            iconWarning.classList.add('hidden');
+            iconError.classList.add('hidden');
+            iconInfo.classList.add('hidden');
+            iconSuccess.classList.add('hidden');
+
+            if (type === 'error') {
+                iconContainer.className = 'w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-rose-100/50';
+                iconError.classList.remove('hidden');
+            } else if (type === 'info') {
+                iconContainer.className = 'w-14 h-14 bg-sky-50 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-sky-100/50';
+                iconInfo.classList.remove('hidden');
+            } else if (type === 'success') {
+                iconContainer.className = 'w-14 h-14 bg-emerald-50 text-emerald-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-emerald-100/50';
+                iconSuccess.classList.remove('hidden');
+            } else {
+                iconContainer.className = 'w-14 h-14 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-amber-100/50';
+                iconWarning.classList.remove('hidden');
+            }
+
+            overlay.classList.remove('hidden');
+        };
+
+        window.closeGlobalAlertModal = function() {
+            const overlay = document.getElementById('globalAlertOverlay');
+            if (overlay) overlay.classList.add('hidden');
+        };
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') closeGlobalAlertModal();
+        });
+
+        // Override native window.alert to present clean modal UI
+        window.alert = function(message) {
+            window.showAlertModal(message);
+        };
+    </script>
     @yield('scripts')
     @stack('scripts')
 </body>

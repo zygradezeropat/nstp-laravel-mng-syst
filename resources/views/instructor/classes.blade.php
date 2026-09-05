@@ -252,7 +252,7 @@
 
             window.exportToExcel = function() {
                 if (!allStudents.length) {
-                    alert('No student records found to export.');
+                    showAlertModal('No student records found to export.', 'Export Notice', 'warning');
                     return;
                 }
 

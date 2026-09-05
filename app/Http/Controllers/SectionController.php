@@ -741,6 +741,10 @@ class SectionController extends Controller
             |--------------------------------------------------------------------------
             */
 
+            error_log("=================================================");
+            error_log("[COMPARE CLASS LIST DEBUG] Starting comparison for " . count($studentsList) . " rows against " . $dbStudents->count() . " master DB students.");
+            error_log("=================================================");
+
             foreach (
                 $studentsList as $index => $s
             ) {
@@ -780,7 +784,7 @@ class SectionController extends Controller
                     $sNo === '' &&
                     $program === ''
                 ) {
-
+                    error_log("[ROW " . ($index + 1) . "] Ignored completely empty row.");
                     continue;
                 }
 
@@ -792,6 +796,7 @@ class SectionController extends Controller
                 */
 
                 if ($sName === '') {
+                    error_log("[ROW " . ($index + 1) . "] Skipped: Name is missing from uploaded Excel row.");
 
                     $unmatchedRows[] = [
 
@@ -915,6 +920,10 @@ class SectionController extends Controller
                                 !$courseMatches
                             )
                         ) {
+                            error_log("[ROW " . ($index + 1) . "] REVIEW REQUIRED: ID '{$sNo}' found in DB, but safety check failed.");
+                            error_log("  -> Uploaded: Name='{$sName}', Course='{$classListCourse}'");
+                            error_log("  -> DB Record: Name='{$studentById->last_name}, {$studentById->first_name}', Course='{$studentById->course}'");
+                            error_log("  -> Check Results: nameMatches=" . ($nameMatches ? 'YES' : 'NO') . ", courseMatches=" . ($courseMatches ? 'YES' : 'NO'));
 
                             $needsReview[] = [
 
@@ -951,6 +960,10 @@ class SectionController extends Controller
 
                         $matchedBy =
                             'student_id';
+
+                        error_log("[ROW " . ($index + 1) . "] MATCHED BY STUDENT ID: ID='{$sNo}', Name='{$sName}'");
+                    } else {
+                        error_log("[ROW " . ($index + 1) . "] Student ID '{$sNo}' not found in DB. Falling back to Name/Course search...");
                     }
                 }
 
@@ -966,9 +979,8 @@ class SectionController extends Controller
                 */
 
                 if (
-    $candidates->isEmpty() &&
-    !$sNo
-) {
+                    $candidates->isEmpty()
+                ) {
 
     /*
     |--------------------------------------------------------------------------
@@ -1088,6 +1100,7 @@ class SectionController extends Controller
                 if (
                     $candidates->count() > 1
                 ) {
+                    error_log("[ROW " . ($index + 1) . "] MULTIPLE MATCHES ({$candidates->count()} students) for Name='{$sName}'. Manual review required.");
 
                     $needsReview[] = [
 
@@ -1136,6 +1149,10 @@ class SectionController extends Controller
                 if (
                     $candidates->isEmpty()
                 ) {
+                    $reasonText = $sNo
+                        ? "Student ID '{$sNo}' was not found in the master student list."
+                        : "No unique student matched by name ('{$sName}') and program ('{$classListCourse}').";
+                    error_log("[ROW " . ($index + 1) . "] UNMATCHED: {$reasonText}");
 
                     $unmatchedRows[] = [
 
@@ -1182,7 +1199,11 @@ class SectionController extends Controller
                 */
 
                 $resolvedStudentId =
-                    $dbStudent->student_id;
+                    !empty($dbStudent->student_id)
+                        ? $dbStudent->student_id
+                        : (!empty($dbStudent->serial_no)
+                            ? $dbStudent->serial_no
+                            : ('STUDENT-' . $dbStudent->id));
 
 
                 /*
@@ -1428,6 +1449,7 @@ class SectionController extends Controller
         } catch (\Exception $e) {
 
             DB::rollBack();
+            error_log("[COMPARE ERROR EXCEPTION] " . $e->getMessage());
 
 
             return response()->json([
@@ -1741,20 +1763,34 @@ class SectionController extends Controller
             );
 
 
-        $uploadedFirstName =
+        $firstWordUploaded =
             $compact(
                 $firstNameWords[0] ?? ''
             );
 
+        $fullUploadedFirstName =
+            $compact(
+                $firstNamePart
+            );
 
-        return
-            $uploadedLastName ===
-            $dbLastName
 
-            &&
+        $lastNameMatch = (
+            $uploadedLastName === $dbLastName
+        );
 
-            $uploadedFirstName ===
-            $dbFirstName;
+        $firstNameMatch = (
+            $firstWordUploaded === $dbFirstName
+            ||
+            $fullUploadedFirstName === $dbFirstName
+            ||
+            (strlen($firstWordUploaded) >= 2 && str_contains($dbFirstName, $firstWordUploaded))
+            ||
+            (strlen($dbFirstName) >= 2 && str_contains($fullUploadedFirstName, $dbFirstName))
+        );
+
+        if ($lastNameMatch && $firstNameMatch) {
+            return true;
+        }
     }
 
 
@@ -1783,7 +1819,6 @@ class SectionController extends Controller
     if (
         count($words) < 2
     ) {
-
         return false;
     }
 
@@ -1802,14 +1837,23 @@ class SectionController extends Controller
         );
 
 
-    return
-        $uploadedFirstName ===
-        $dbFirstName
+    $fullUploadedCompact = $compact($uploadedName);
+    $fullDbCompact = $compact(($student->last_name ?? '') . ' ' . ($student->first_name ?? ''));
+    $fullDbCompactAlt = $compact(($student->first_name ?? '') . ' ' . ($student->last_name ?? ''));
 
+    if ($fullUploadedCompact === $fullDbCompact || $fullUploadedCompact === $fullDbCompactAlt) {
+        return true;
+    }
+
+    return (
+        $uploadedLastName === $dbLastName
         &&
-
-        $uploadedLastName ===
-        $dbLastName;
+        (
+            $uploadedFirstName === $dbFirstName
+            ||
+            (strlen($uploadedFirstName) >= 2 && str_contains($dbFirstName, $uploadedFirstName))
+        )
+    );
 }
 
 
