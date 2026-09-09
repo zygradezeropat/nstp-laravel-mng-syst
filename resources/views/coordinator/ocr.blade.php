@@ -63,7 +63,13 @@
                             <h2 class="font-bold text-slate-900 text-base">Import History</h2>
                             <div class="text-xs text-slate-500 font-medium mt-0.5" id="historyCount">0 file(s) processed</div>
                         </div>
-                        <button id="clearHistoryBtn" class="text-xs text-slate-400 hover:text-rose-600 hover:underline font-medium transition hidden">Clear All</button>
+                        <div class="flex items-center gap-2">
+                            <button id="exportAllHistoryBtn" class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60 transition hidden" title="Export all history entries to Excel">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                Export All
+                            </button>
+                            <button id="clearHistoryBtn" class="text-xs text-slate-400 hover:text-rose-600 hover:underline font-medium transition hidden">Clear All</button>
+                        </div>
                     </div>
                     <ul class="space-y-2 max-h-[400px] overflow-y-auto pr-1" id="ocrUploadHistory">
                         <li id="noHistoryItem" class="text-sm text-slate-400 text-center py-10 flex flex-col items-center gap-2">
@@ -306,10 +312,92 @@
         </div>
     </div>
 </div>
+
+<!-- EXPORT HISTORY CONFIRMATION MODAL -->
+<div id="exportConfirmModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
+        <!-- Modal Header -->
+        <div class="p-6 bg-slate-900 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
+                    <x-icon name="download" class="w-5 h-5" />
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-white">Confirm History Excel Export</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Please review the list of imported files below before exporting to Excel.</p>
+                </div>
+            </div>
+            <button id="closeExportConfirmModalBtn" class="w-8 h-8 rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white flex items-center justify-center transition">
+                <x-icon name="close" class="w-4 h-4" />
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/50">
+            <!-- Stats Summary Cards -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                        <x-icon name="document" class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Section Files</div>
+                        <div id="exportModalFileCount" class="text-xl font-extrabold text-slate-800">0 File(s)</div>
+                    </div>
+                </div>
+                <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                        <x-icon name="users" class="w-5 h-5" />
+                    </div>
+                    <div>
+                        <div class="text-[10px] uppercase font-bold tracking-wider text-slate-400">Total Student Records</div>
+                        <div id="exportModalStudentCount" class="text-xl font-extrabold text-slate-800">0 Record(s)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- List of Files to Export -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+                <div class="p-3.5 bg-slate-100/70 border-b border-slate-200/60 flex items-center justify-between">
+                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Files & Sections Included in Export</div>
+                    <span class="text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">Multi-Sheet XLSX</span>
+                </div>
+                <div class="overflow-x-auto max-h-64">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100 sticky top-0 bg-slate-50">
+                            <tr>
+                                <th class="py-3 px-4 w-10 text-center">#</th>
+                                <th class="py-3 px-4">Component</th>
+                                <th class="py-3 px-4">Section Code</th>
+                                <th class="py-3 px-4">Source Filename</th>
+                                <th class="py-3 px-4 text-center">Processed Time</th>
+                                <th class="py-3 px-4 text-center">Students</th>
+                            </tr>
+                        </thead>
+                        <tbody id="exportConfirmTableBody" class="divide-y divide-slate-100">
+                            <!-- Dynamic rows injected here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
+            <button id="cancelExportModalBtn" class="px-5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition">
+                Cancel
+            </button>
+            <button id="confirmExportModalBtn" class="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-md shadow-emerald-600/20">
+                <x-icon name="download" class="w-4 h-4" /> Confirm & Download Excel
+            </button>
+        </div>
+    </div>
+</div>
 @endsection
 
 @push('scripts')
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 @vite(['resources/js/app.js'])
 <script>
     if (window.pdfjsLib) {
@@ -317,6 +405,117 @@
     }
 
     document.addEventListener('DOMContentLoaded', () => {
+        // CHED Official Export Schema Configuration
+        const PRIVACY_CONSENT_HEADER = "In accordance with RA 10173 or Data Privacy Act of 2012, I consent to the following terms and conditions on the collection, use, processing and disclosure of my personal data. I am aware that the Davao del Norte State College has collected and stored my personal data upon accomplishment of this form. These data include my full name, birthday, contact details like addresses, landline/mobile numbers, email address and program. I express my consent for the Davao del Norte State College to collect, store my personal information. I hereby affirm my right to be informed, object to processing, access, and rectify and to suspend or withdraw my personal data pursuant to the provisions of the RA 10173 and its implementing rules and regulations. I warrant that I have read, understood all of the above provisions, and agreed with its full implementation. ";
+        const PRIVACY_CONSENT_VALUE = "I agree and give my consent.";
+
+        const CHED_EXCEL_HEADERS = [
+            'Timestamp',
+            'Email Address',
+            PRIVACY_CONSENT_HEADER,
+            'NSTP Component ',
+            'Region: ',
+            'Provincial Address:',
+            'SURNAME',
+            'FIRST NAME',
+            'EXTENSION NAME Note: Please write N/A if not applicable. ',
+            'MIDDLE NAME',
+            'GENDER',
+            'BIRTHDAY (YYYY/MM/DD) Follow the format ex. 2004/12/25',
+            'CITY ADDRESS ',
+            'PROGRAM NAME',
+            'EMAIL ADDRESS: ',
+            'CONTACT NUMBER '
+        ];
+
+        const parseFullName = (rawName) => {
+            if (!rawName) return { surname: 'N/A', firstName: 'N/A', middleName: 'N/A', extName: 'N/A' };
+            let str = rawName.trim();
+            let surname = 'N/A';
+            let firstName = 'N/A';
+            let middleName = 'N/A';
+            let extName = 'N/A';
+
+            const extensions = ['JR', 'JR.', 'SR', 'SR.', 'III', 'IV', 'II', 'V', 'VI'];
+
+            if (str.includes(',')) {
+                const parts = str.split(',').map(p => p.trim());
+                surname = parts[0] || 'N/A';
+                
+                let restTokens = parts[1] ? parts[1].split(/\s+/).filter(Boolean) : [];
+                if (restTokens.length > 1) {
+                    const lastTokenUpper = restTokens[restTokens.length - 1].toUpperCase();
+                    if (extensions.includes(lastTokenUpper)) {
+                        extName = restTokens.pop();
+                    }
+                }
+                if (restTokens.length > 0) {
+                    firstName = restTokens[0];
+                    middleName = restTokens.slice(1).join(' ') || 'N/A';
+                }
+            } else {
+                const tokens = str.split(/\s+/).filter(Boolean);
+                if (tokens.length === 1) {
+                    firstName = tokens[0];
+                } else if (tokens.length === 2) {
+                    surname = tokens[1];
+                    firstName = tokens[0];
+                } else {
+                    surname = tokens[tokens.length - 1];
+                    firstName = tokens[0];
+                    middleName = tokens.slice(1, -1).join(' ') || 'N/A';
+                }
+            }
+
+            return { surname, firstName, middleName, extName };
+        };
+
+        const formatChedExcelRow = (std, sectionName = '', componentName = '', timeStr = '') => {
+            const parsed = parseFullName(std.name);
+            const email = std.email || (std.student_no ? `${std.student_no}@dnsc.edu.ph` : 'N/A');
+            const now = new Date();
+            const defaultTimestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+            const timestamp = std.created_at || timeStr || defaultTimestamp;
+
+            return [
+                timestamp,
+                email,
+                PRIVACY_CONSENT_VALUE,
+                componentName || std.component || 'CWTS',
+                std.region || 'Region XI',
+                std.province || 'Davao del Norte',
+                parsed.surname.toUpperCase(),
+                parsed.firstName.toUpperCase(),
+                parsed.extName,
+                parsed.middleName.toUpperCase(),
+                std.gender || 'N/A',
+                std.birthday || 'N/A',
+                std.city_address || std.address || 'Panabo City',
+                std.program || sectionName || 'BSIT',
+                email,
+                std.contact_number || std.phone || 'N/A'
+            ];
+        };
+
+        const getChedColsWidths = () => [
+            { wch: 22 }, // Timestamp
+            { wch: 28 }, // Email Address
+            { wch: 35 }, // Privacy Consent
+            { wch: 18 }, // NSTP Component
+            { wch: 15 }, // Region
+            { wch: 22 }, // Provincial Address
+            { wch: 20 }, // SURNAME
+            { wch: 20 }, // FIRST NAME
+            { wch: 18 }, // EXTENSION NAME
+            { wch: 20 }, // MIDDLE NAME
+            { wch: 10 }, // GENDER
+            { wch: 24 }, // BIRTHDAY
+            { wch: 22 }, // CITY ADDRESS
+            { wch: 18 }, // PROGRAM NAME
+            { wch: 28 }, // EMAIL ADDRESS:
+            { wch: 20 }  // CONTACT NUMBER
+        ];
+
         // Elements configuration
         const uploadState = document.getElementById('uploadState');
         const loadingState = document.getElementById('loadingState');
@@ -328,6 +527,15 @@
         const noHistoryItem = document.getElementById('noHistoryItem');
         const historyCount = document.getElementById('historyCount');
         const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+        const exportAllHistoryBtn = document.getElementById('exportAllHistoryBtn');
+
+        const exportConfirmModal = document.getElementById('exportConfirmModal');
+        const closeExportConfirmModalBtn = document.getElementById('closeExportConfirmModalBtn');
+        const cancelExportModalBtn = document.getElementById('cancelExportModalBtn');
+        const confirmExportModalBtn = document.getElementById('confirmExportModalBtn');
+        const exportModalFileCount = document.getElementById('exportModalFileCount');
+        const exportModalStudentCount = document.getElementById('exportModalStudentCount');
+        const exportConfirmTableBody = document.getElementById('exportConfirmTableBody');
 
         const loadingTitle = document.getElementById('loadingTitle');
         const loadingSubtitle = document.getElementById('loadingSubtitle');
@@ -370,6 +578,7 @@
             if (history.length > 0) {
                 if (noHistoryItem) noHistoryItem.classList.add('hidden');
                 if (clearHistoryBtn) clearHistoryBtn.classList.remove('hidden');
+                if (exportAllHistoryBtn) exportAllHistoryBtn.classList.remove('hidden');
                 
                 // Remove existing history elements except noHistoryItem
                 const items = ocrUploadHistory.querySelectorAll('.history-entry');
@@ -424,6 +633,7 @@
             } else {
                 if (noHistoryItem) noHistoryItem.classList.remove('hidden');
                 if (clearHistoryBtn) clearHistoryBtn.classList.add('hidden');
+                if (exportAllHistoryBtn) exportAllHistoryBtn.classList.add('hidden');
                 historyCount.textContent = '0 file(s) processed';
                 
                 // Clear any existing list items
@@ -467,6 +677,154 @@
                 }
             });
         }
+
+        const openExportConfirmModal = () => {
+            const stored = localStorage.getItem('NSTP_OCR_HISTORY');
+            let history = [];
+            try {
+                history = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                history = [];
+            }
+
+            if (!history.length) {
+                if (window.showToast) window.showToast('No history entries available to export.', 'warning', 'Export Empty');
+                return;
+            }
+
+            let totalStudents = 0;
+            if (exportConfirmTableBody) exportConfirmTableBody.innerHTML = '';
+
+            history.forEach((entry, idx) => {
+                const stdCount = (entry.results || []).length;
+                totalStudents += stdCount;
+
+                if (exportConfirmTableBody) {
+                    const tr = document.createElement('tr');
+                    tr.className = 'border-b border-slate-100 hover:bg-slate-50 transition text-xs';
+                    
+                    let componentClass = entry.summary.component === 'ROTC' 
+                        ? 'bg-rose-50 text-rose-700' 
+                        : (entry.summary.component === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-indigo-50 text-indigo-700');
+
+                    tr.innerHTML = `
+                        <td class="py-3 px-4 text-center font-bold text-slate-400">${idx + 1}</td>
+                        <td class="py-3 px-4">
+                            <span class="font-bold px-2 py-0.5 rounded ${componentClass}">${entry.summary.component || 'CWTS'}</span>
+                        </td>
+                        <td class="py-3 px-4 font-bold text-slate-800">${entry.summary.section || 'N/A'}</td>
+                        <td class="py-3 px-4 font-mono text-slate-600 truncate max-w-xs">${entry.filename || 'N/A'}</td>
+                        <td class="py-3 px-4 text-center text-slate-400">${entry.time || 'N/A'}</td>
+                        <td class="py-3 px-4 text-center font-bold text-indigo-600">${stdCount}</td>
+                    `;
+                    exportConfirmTableBody.appendChild(tr);
+                }
+            });
+
+            if (exportModalFileCount) exportModalFileCount.textContent = `${history.length} File(s)`;
+            if (exportModalStudentCount) exportModalStudentCount.textContent = `${totalStudents} Record(s)`;
+
+            if (exportConfirmModal) exportConfirmModal.classList.remove('hidden');
+        };
+
+        const closeExportConfirmModal = () => {
+            if (exportConfirmModal) exportConfirmModal.classList.add('hidden');
+        };
+
+        if (closeExportConfirmModalBtn) closeExportConfirmModalBtn.addEventListener('click', closeExportConfirmModal);
+        if (cancelExportModalBtn) cancelExportModalBtn.addEventListener('click', closeExportConfirmModal);
+
+        if (exportAllHistoryBtn) {
+            exportAllHistoryBtn.addEventListener('click', openExportConfirmModal);
+        }
+
+        if (confirmExportModalBtn) {
+            confirmExportModalBtn.addEventListener('click', () => {
+                closeExportConfirmModal();
+                executeAllHistoryExport();
+            });
+        }
+
+        const executeAllHistoryExport = () => {
+            if (!window.XLSX) {
+                alert('SheetJS library is still loading. Please try again in a moment.');
+                return;
+            }
+
+            const stored = localStorage.getItem('NSTP_OCR_HISTORY');
+            let history = [];
+            try {
+                history = stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                history = [];
+            }
+
+            if (!history.length) {
+                if (window.showToast) window.showToast('No history entries available to export.', 'warning', 'Export Empty');
+                return;
+            }
+
+            try {
+                const wb = window.XLSX.utils.book_new();
+                let totalRecordsCount = 0;
+                const usedSheetNames = new Set();
+
+                const masterRows = [ CHED_EXCEL_HEADERS ];
+
+                history.forEach((entry) => {
+                    const sectionName = entry.summary ? entry.summary.section : 'Imported';
+                    const component = entry.summary ? entry.summary.component : 'CWTS';
+                    const students = entry.results || [];
+
+                    students.forEach((std) => {
+                        totalRecordsCount++;
+                        masterRows.push(formatChedExcelRow(std, sectionName, component, entry.time));
+                    });
+
+                    if (students.length > 0) {
+                        const sectionRows = [ CHED_EXCEL_HEADERS ];
+                        students.forEach((std) => {
+                            sectionRows.push(formatChedExcelRow(std, sectionName, component, entry.time));
+                        });
+
+                        const wsSection = window.XLSX.utils.aoa_to_sheet(sectionRows);
+                        wsSection['!cols'] = getChedColsWidths();
+
+                        // Ensure unique sheet name in Excel (max 31 chars)
+                        let baseSheetName = sectionName.replace(/[:\\/?*\[\]]/g, '').slice(0, 25) || 'Section';
+                        let uniqueSheetName = baseSheetName;
+                        let counter = 1;
+                        while (usedSheetNames.has(uniqueSheetName)) {
+                            uniqueSheetName = `${baseSheetName}_${counter}`;
+                            counter++;
+                        }
+                        usedSheetNames.add(uniqueSheetName);
+
+                        window.XLSX.utils.book_append_sheet(wb, wsSection, uniqueSheetName);
+                    }
+                });
+
+                // Master summary sheet
+                const wsMaster = window.XLSX.utils.aoa_to_sheet(masterRows);
+                wsMaster['!cols'] = getChedColsWidths();
+
+                let masterSheetName = 'All History Imports';
+                let mCounter = 1;
+                while (usedSheetNames.has(masterSheetName)) {
+                    masterSheetName = `All History Imports_${mCounter}`;
+                    mCounter++;
+                }
+                window.XLSX.utils.book_append_sheet(wb, wsMaster, masterSheetName);
+
+                const fileName = `CHED_NSTP_All_Import_History_${Date.now().toString().slice(-6)}.xlsx`;
+                window.XLSX.writeFile(wb, fileName);
+
+                if (window.showToast) window.showToast(`Exported ${totalRecordsCount} student record(s) across ${history.length} section file(s).`, 'success', 'History Export Completed');
+            } catch (err) {
+                console.error('Export Error:', err);
+                alert('Export failed: ' + err.message);
+            }
+        };
 
         // Initialize history list
         loadHistoryFromStorage();
@@ -1180,36 +1538,19 @@
             const component = resultsComponentTag ? resultsComponentTag.textContent.trim() : 'CWTS';
             
             const wb = window.XLSX.utils.book_new();
-            const rows = [
-                ['#', 'Student Name', 'Student No.', 'Section', 'Program / Component', 'Final Grade', 'Remarks']
-            ];
+            const rows = [ CHED_EXCEL_HEADERS ];
             
-            studentsToExport.forEach((std, i) => {
-                rows.push([
-                    i + 1,
-                    std.name,
-                    std.student_no || 'Pending',
-                    sectionName,
-                    component,
-                    std.grade !== null ? std.grade : '-',
-                    std.remarks
-                ]);
+            studentsToExport.forEach((std) => {
+                rows.push(formatChedExcelRow(std, sectionName, component));
             });
             
             const ws = window.XLSX.utils.aoa_to_sheet(rows);
-            ws['!cols'] = [
-                { wch: 5 },   // #
-                { wch: 28 },  // Student Name
-                { wch: 15 },  // Student No.
-                { wch: 12 },  // Section
-                { wch: 20 },  // Program
-                { wch: 12 },  // Grade
-                { wch: 12 }   // Remarks
-            ];
+            ws['!cols'] = getChedColsWidths();
             
-            window.XLSX.utils.book_append_sheet(wb, ws, sectionName);
+            const safeSheetName = sectionName.replace(/[:\\/?*\[\]]/g, '').slice(0, 30) || 'Section';
+            window.XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
             
-            const fileName = `NSTP_Grades_${sectionName}_${exportTitle}_${Date.now().toString().slice(-6)}.xlsx`;
+            const fileName = `CHED_NSTP_Grades_${sectionName}_${exportTitle}_${Date.now().toString().slice(-6)}.xlsx`;
             window.XLSX.writeFile(wb, fileName);
             
             if (window.showToast) window.showToast(`${studentsToExport.length} student record(s) exported successfully.`, 'success', 'Export Completed');
