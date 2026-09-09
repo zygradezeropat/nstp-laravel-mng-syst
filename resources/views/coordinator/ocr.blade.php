@@ -8,7 +8,7 @@
     <div class="flex items-center justify-between mb-4">
         <div>
             <h1 class="text-2xl font-bold tracking-tight text-slate-900">OCR Grade Import</h1>
-            <p class="text-sm text-slate-500 mt-1">Upload XLSX/XLS grade sheets to automatically record grades and enrollments in the database</p>
+            <p class="text-sm text-slate-500 mt-1">Upload XLSX/XLS grade sheets or PDF Grading Sheets to automatically record grades and enrollments in the database</p>
         </div>
     </div>
 
@@ -22,9 +22,9 @@
                     <div class="w-16 h-16 rounded-2xl bg-white border border-slate-100 text-indigo-600 flex items-center justify-center shadow-md group-hover:scale-110 group-hover:shadow-indigo-100 transition-all duration-300 mb-4">
                         <x-icon name="upload" class="w-8 h-8" />
                     </div>
-                    <div class="text-slate-800 font-semibold text-base">Drop your XLSX grade sheet here or <span class="text-indigo-600 underline group-hover:text-indigo-700 transition">click to browse</span></div>
-                    <div class="text-xs text-slate-400 mt-2 font-medium">Supports Excel formats (.xlsx, .xls) &middot; up to 25 MB</div>
-                    <input id="ocrFileInput" type="file" accept=".xlsx,.xls" class="hidden" />
+                    <div class="text-slate-800 font-semibold text-base">Drop your grade sheet (Excel, PDF, or Image) here or <span class="text-indigo-600 underline group-hover:text-indigo-700 transition">click to browse</span></div>
+                    <div class="text-xs text-slate-400 mt-2 font-medium">Supports Excel (.xlsx, .xls), PDF (.pdf) & Image (.png, .jpg, .jpeg) &middot; up to 25 MB</div>
+                    <input id="ocrFileInput" type="file" accept=".xlsx,.xls,.pdf,.png,.jpg,.jpeg" class="hidden" />
                 </div>
 
                 <!-- Info Cards -->
@@ -47,8 +47,8 @@
                 <div class="mt-4 p-4 rounded-xl bg-amber-50/60 border border-amber-100 text-xs text-amber-800 flex items-start gap-3">
                     <x-icon name="alertc" class="w-5 h-5 shrink-0 text-amber-500" />
                     <div class="space-y-1">
-                        <span class="font-bold block">Expected XLSX Column Structure:</span>
-                        <p class="leading-relaxed">The sheet must contain at least a <strong>Student Name</strong> column and a <strong>Final Grade</strong> (or GWA) column. A <strong>Section</strong> column is optional; if missing, it will be inferred from the filename.</p>
+                        <span class="font-bold block">Supported File Formats:</span>
+                        <p class="leading-relaxed">Upload an <strong>Excel file</strong> (.xlsx/.xls), <strong>DNSC PDF Grading Sheet</strong> (.pdf), or <strong>Scanned Image</strong> (.png/.jpg). Files will open in a verification modal for review and editing before approving database sync.</p>
                     </div>
                 </div>
             </div>
@@ -161,12 +161,15 @@
         <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <!-- Search / Filter Bar -->
             <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50/50">
-                <div class="flex items-center gap-3">
-                    <h3 class="font-bold text-slate-800 text-base">Student Grade Roster</h3>
-                    <button id="exportResultsBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition shadow-sm">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <h3 class="font-bold text-slate-800 text-base mr-2">Student Grade Roster</h3>
+                    <button id="exportSelectedBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition shadow-xs">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-slate-500"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> Export Selected
+                    </button>
+                    <button id="exportResultsBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition shadow-xs">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor" class="w-3.5 h-3.5 shrink-0">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
-                        </svg> Export to Excel
+                        </svg> Export All to Excel
                     </button>
                 </div>
                 <div class="flex items-center gap-3 w-full sm:w-auto">
@@ -185,6 +188,9 @@
                 <table class="w-full text-left text-sm whitespace-nowrap" id="rosterTable">
                     <thead>
                         <tr class="bg-slate-50 border-b border-slate-100 text-slate-500 font-semibold">
+                            <th class="py-3.5 px-4 w-10 text-center">
+                                <input type="checkbox" id="selectAllRoster" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" />
+                            </th>
                             <th class="py-3.5 px-4 w-10 text-center">#</th>
                             <th class="py-3.5 px-4">Student Name</th>
                             <th class="py-3.5 px-4 w-32">Student ID</th>
@@ -198,14 +204,118 @@
                     </tbody>
                 </table>
             </div>
+
+            <!-- Roster Table Pagination -->
+            <div class="px-5 py-3.5 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/50 text-xs text-slate-500">
+                <div id="rosterPaginationInfo" class="font-medium text-slate-600">Showing 1 to 10 of 0 entries</div>
+                <div class="flex items-center gap-2">
+                    <button id="rosterPrevBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm">
+                        <x-icon name="arrowleft" class="w-3.5 h-3.5" /> Previous
+                    </button>
+                    <span id="rosterPageIndicator" class="px-3 font-bold text-slate-700 bg-white border border-slate-200 py-1.5 rounded-xl shadow-xs">Page 1 of 1</span>
+                    <button id="rosterNextBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm">
+                        Next <x-icon name="arrowright" class="w-3.5 h-3.5" />
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PRE-SAVE GRADE VERIFICATION & REVIEW MODAL -->
+<div id="ocrReviewModal" class="hidden fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div class="bg-white rounded-3xl border border-slate-100 shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-200">
+        <!-- Modal Header -->
+        <div class="p-6 bg-slate-900 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 flex items-center justify-center">
+                    <x-icon name="filecheck" class="w-5 h-5" />
+                </div>
+                <div>
+                    <h3 class="font-bold text-lg text-white">Review & Edit Parsed Grade Sheet</h3>
+                    <p class="text-xs text-slate-400 mt-0.5">Verify student names, IDs, grades, and remarks before approving database sync.</p>
+                </div>
+            </div>
+            <button id="closeReviewModalBtn" class="w-8 h-8 rounded-full bg-white/10 text-slate-300 hover:bg-white/20 hover:text-white flex items-center justify-center transition">
+                <x-icon name="close" class="w-4 h-4" />
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 overflow-y-auto space-y-5 flex-1 bg-slate-50/50">
+            <!-- Metadata Row -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Target Section</label>
+                    <input id="reviewSectionInput" type="text" placeholder="e.g. CWTS-1A" class="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" />
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Source File</label>
+                    <div id="reviewFilenameBadge" class="w-full px-3 py-2 text-xs font-mono font-medium rounded-xl bg-slate-100 text-slate-700 truncate border border-slate-200">file.pdf</div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Parsed Rows</label>
+                    <div id="reviewCountBadge" class="w-full px-3 py-2 text-xs font-bold rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">0 Record(s)</div>
+                </div>
+            </div>
+
+            <!-- Image Preview Container (Visible if image file uploaded) -->
+            <div id="reviewImageContainer" class="hidden bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
+                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Uploaded Document Image Preview</div>
+                <div class="max-h-60 overflow-auto border border-slate-200 rounded-xl bg-slate-900/5 p-2 text-center">
+                    <img id="reviewImgPreview" class="max-w-full mx-auto rounded-lg shadow-sm" src="" alt="Grading Sheet Preview" />
+                </div>
+            </div>
+
+            <!-- Editable Roster Table -->
+            <div class="bg-white rounded-2xl border border-slate-100 shadow-xs overflow-hidden">
+                <div class="p-3.5 bg-slate-100/70 border-b border-slate-200/60 flex items-center justify-between">
+                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Parsed Student Grade Roster</div>
+                    <button id="addReviewRowBtn" class="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-xs">
+                        + Add Student Row
+                    </button>
+                </div>
+                <div class="overflow-x-auto max-h-72">
+                    <table class="w-full text-left text-sm whitespace-nowrap">
+                        <thead class="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100 sticky top-0 bg-slate-50">
+                            <tr>
+                                <th class="py-3 px-3 w-10 text-center">#</th>
+                                <th class="py-3 px-3">Student Name</th>
+                                <th class="py-3 px-3 w-36">Student ID</th>
+                                <th class="py-3 px-3 w-28 text-center">Grade</th>
+                                <th class="py-3 px-3 w-36 text-center">Remarks</th>
+                                <th class="py-3 px-3 w-16 text-center">Remove</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reviewTableBody" class="divide-y divide-slate-100">
+                            <!-- Dynamic editable rows inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
+            <button id="cancelReviewBtn" class="px-5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 transition">
+                Cancel & Reset
+            </button>
+            <button id="confirmSyncBtn" class="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition shadow-md shadow-emerald-600/20">
+                <x-icon name="check2" class="w-4 h-4" /> Approve & Sync
+            </button>
         </div>
     </div>
 </div>
 @endsection
 
 @push('scripts')
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 @vite(['resources/js/app.js'])
 <script>
+    if (window.pdfjsLib) {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
         // Elements configuration
         const uploadState = document.getElementById('uploadState');
@@ -235,9 +345,16 @@
 
         const rosterSearch = document.getElementById('rosterSearch');
         const rosterTableBody = document.getElementById('rosterTableBody');
+        const rosterPaginationInfo = document.getElementById('rosterPaginationInfo');
+        const rosterPageIndicator = document.getElementById('rosterPageIndicator');
+        const rosterPrevBtn = document.getElementById('rosterPrevBtn');
+        const rosterNextBtn = document.getElementById('rosterNextBtn');
 
-        // Current active result roster cache
+        // Current active result roster cache & pagination state
         let currentRoster = [];
+        let filteredRoster = [];
+        let currentPage = 1;
+        const itemsPerPage = 10;
 
         // 1. History Persistence Management (Local Storage)
         const loadHistoryFromStorage = () => {
@@ -382,11 +499,11 @@
             });
         }
 
-        // 3. Process File via SheetJS and Sync with Server
+        // Process File via SheetJS / PDF.js / Image Reader
         const processFile = (file) => {
             const ext = file.name.split('.').pop().toLowerCase();
-            if (!['xlsx', 'xls'].includes(ext)) {
-                if (window.showToast) window.showToast('Only XLSX and XLS formats are supported.', 'error', 'Unsupported File');
+            if (!['xlsx', 'xls', 'pdf', 'png', 'jpg', 'jpeg'].includes(ext)) {
+                if (window.showToast) window.showToast('Only Excel, PDF, and Image (PNG/JPG) formats are supported.', 'error', 'Unsupported File');
                 return;
             }
 
@@ -395,15 +512,25 @@
                 return;
             }
 
-            // Enter loading visual state
+            if (ext === 'pdf') {
+                processPdfFile(file);
+                return;
+            }
+
+            if (['png', 'jpg', 'jpeg'].includes(ext)) {
+                processImageFile(file);
+                return;
+            }
+
+            // Enter loading visual state for Excel
             uploadState.classList.add('hidden');
             loadingState.classList.remove('hidden');
-            updateProgress(15, 'Reading workbook...', 'Loading file contents...');
+            updateProgress(25, 'Reading workbook...', 'Loading file contents...');
 
             const reader = new FileReader();
             reader.onload = (evt) => {
                 try {
-                    updateProgress(35, 'Parsing grade rows...', 'Extracting columns from the first sheet...');
+                    updateProgress(50, 'Parsing grade rows...', 'Extracting columns from sheet...');
 
                     const wb = window.XLSX.read(evt.target.result, { type: 'array' });
                     const ws = wb.Sheets[wb.SheetNames[0]];
@@ -413,7 +540,6 @@
                         throw new Error('The Excel sheet appears to be empty.');
                     }
 
-                    // Flexible Column Mapping Resolution
                     const getColVal = (row, ...keys) => {
                         for (const k of keys) {
                             const found = Object.keys(row).find(rk => rk.trim().toLowerCase() === k.toLowerCase());
@@ -424,31 +550,6 @@
                         return '';
                     };
 
-                    const classifyGrade = (rawGrade) => {
-                        const g = parseFloat(rawGrade);
-                        if (isNaN(g)) {
-                            const clean = String(rawGrade || '').trim().toLowerCase();
-                            if (clean === 'passed' || clean === 'pass' || clean === 'p') return 'Passed';
-                            if (clean === 'failed' || clean === 'fail' || clean === 'f') return 'Failed';
-                            if (clean === 'pending' || clean === 'active') return 'Pending';
-                            return 'N/A';
-                        }
-                        if (g >= 1.0 && g <= 3.0) return 'Passed';
-                        if (g > 3.0 && g <= 5.0) return 'Failed';
-                        if (g >= 75.0 && g <= 100.0) return 'Passed';
-                        if (g >= 50.0 && g < 75.0) return 'Failed';
-                        return 'N/A';
-                    };
-
-                    const normalizeRemarks = (rawRemarks) => {
-                        if (!rawRemarks) return null;
-                        const clean = String(rawRemarks).trim().toLowerCase();
-                        if (clean.startsWith('pass') || clean === 'p') return 'Passed';
-                        if (clean.startsWith('fail') || clean === 'f') return 'Failed';
-                        if (clean.startsWith('pend') || clean === 'active') return 'Pending';
-                        return null;
-                    };
-
                     let sectionCode = '';
                     const parsedStudents = [];
 
@@ -457,28 +558,38 @@
                         const grade = getColVal(row, 'Grade', 'Final Grade', 'Final_Grade', 'GWA', 'Score', 'Rating', 'Grades', 'GRADE', 'FINAL GRADE');
                         const sec = getColVal(row, 'Section', 'Section Code', 'Class', 'SECTION');
                         const studentNo = getColVal(row, 'Student No', 'Student Number', 'ID', 'Student_No', 'Student_Number', 'STUDENT NO', 'STUDENT NUMBER');
-                        const serialNo = getColVal(row, 'Serial Number', 'Serial No', 'Serial_Number', 'Serial_No', 'SERIAL NUMBER', 'SERIAL NO');
                         const rawRemarks = getColVal(row, 'Remarks', 'Status', 'Remark', 'Remarks/Status', 'REMARKS', 'STATUS', 'REMARK');
 
                         if (!sectionCode && sec) sectionCode = sec;
-                        if (!name) return; // skip headers/empty rows
+                        if (!name) return;
 
-                        const remarksNormalized = normalizeRemarks(rawRemarks);
+                        let remarks = 'N/A';
+                        if (rawRemarks) {
+                            const cleanR = rawRemarks.toLowerCase();
+                            if (cleanR.startsWith('pass') || cleanR === 'p') remarks = 'Passed';
+                            else if (cleanR.startsWith('fail') || cleanR === 'f' || cleanR.startsWith('drop') || cleanR === 'drp') remarks = 'Failed';
+                            else if (cleanR.startsWith('pend') || cleanR === 'inc') remarks = 'Pending';
+                        }
+                        if (remarks === 'N/A' && grade) {
+                            const g = parseFloat(grade);
+                            if (!isNaN(g)) {
+                                if (g >= 1.0 && g <= 3.0) remarks = 'Passed';
+                                else if (g > 3.0) remarks = 'Failed';
+                            }
+                        }
 
                         parsedStudents.push({
                             name,
                             student_no: studentNo || null,
-                            serial_no: serialNo || null,
                             grade: grade || null,
-                            remarks: remarksNormalized || classifyGrade(grade)
+                            remarks: remarks !== 'N/A' ? remarks : 'Passed'
                         });
                     });
 
                     if (!parsedStudents.length) {
-                        throw new Error('No valid students found. Ensure columns like "Name" or "Student Name" exist.');
+                        throw new Error('No valid student rows found in the Excel file.');
                     }
 
-                    // Infer section code if missing
                     if (!sectionCode) {
                         sectionCode = file.name
                             .replace(/\.(xlsx|xls)$/i, '')
@@ -487,70 +598,398 @@
                             .toUpperCase() || 'IMPORTED';
                     }
 
-                    updateProgress(60, 'Synchronizing database...', 'Syncing parsed records with DNSC portal database...');
-
-                    // 4. Send AJAX syncing request to Server
-                    const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-                    
-                    fetch('/coordinator/ocr/import', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRF-TOKEN': csrfToken,
-                            'Accept': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            section: sectionCode.toUpperCase(),
-                            filename: file.name,
-                            students: parsedStudents
-                        })
-                    })
-                    .then(response => {
-                        if (!response.ok) {
-                            return response.json().then(err => { throw new Error(err.message || 'Database error occurred.'); });
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.success) {
-                            updateProgress(100, 'Import Completed!', 'Grades synced and audit logs generated successfully.');
-                            
-                            const now = new Date();
-                            const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
-                            const hours = now.getHours() % 12 || 12;
-                            const timeStr = `Today ${hours}:${String(now.getMinutes()).padStart(2, '0')} ${ampm}`;
-                            
-                            const historyEntry = {
-                                filename: file.name,
-                                time: timeStr,
-                                summary: data.summary,
-                                results: data.results
-                            };
-
-                            // Save to persistent storage and update list
-                            saveHistoryToStorage(historyEntry);
-
-                            setTimeout(() => {
-                                loadingState.classList.add('hidden');
-                                displayResults(historyEntry);
-                            }, 500);
-
-                            if (window.showToast) window.showToast(`Imported ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Import Successful');
-                        } else {
-                            throw new Error(data.message || 'Verification failure.');
-                        }
-                    })
-                    .catch(err => {
-                        handleError(err.message || 'Verification failure.');
-                    });
+                    loadingState.classList.add('hidden');
+                    openReviewModal(file.name, sectionCode, parsedStudents, null);
 
                 } catch (err) {
                     handleError(err.message);
                 }
             };
 
-            reader.onerror = () => handleError('Could not read file. The file may be locked or corrupted.');
+            reader.onerror = () => handleError('Could not read Excel file.');
             reader.readAsArrayBuffer(file);
+        };
+
+        // Process PDF Grading Sheets
+        const processPdfFile = (file) => {
+            uploadState.classList.add('hidden');
+            loadingState.classList.remove('hidden');
+            updateProgress(25, 'Reading PDF Document...', 'Loading PDF pages...');
+
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                try {
+                    updateProgress(50, 'Extracting PDF text...', 'Parsing text layers from PDF pages...');
+                    
+                    const arrayBuffer = evt.target.result;
+                    const loadingTask = window.pdfjsLib.getDocument({ data: arrayBuffer });
+                    const pdf = await loadingTask.promise;
+
+                    let fullTextLines = [];
+                    let detectedSubject = '';
+                    let detectedCourse = '';
+
+                    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                        const page = await pdf.getPage(pageNum);
+                        const textContent = await page.getTextContent();
+                        
+                        const items = textContent.items;
+                        const lineMap = new Map();
+
+                        items.forEach(item => {
+                            if (!item.str || !item.str.trim()) return;
+                            const y = Math.round(item.transform[5] / 4) * 4;
+                            if (!lineMap.has(y)) {
+                                lineMap.set(y, []);
+                            }
+                            lineMap.get(y).push({
+                                x: item.transform[4],
+                                text: item.str.trim()
+                            });
+                        });
+
+                        const sortedYs = Array.from(lineMap.keys()).sort((a, b) => b - a);
+
+                        sortedYs.forEach(y => {
+                            const lineItems = lineMap.get(y).sort((a, b) => a.x - b.x);
+                            const lineStr = lineItems.map(i => i.text).join(' ');
+                            fullTextLines.push(lineStr);
+
+                            if (lineStr.includes('Subject No:') || lineStr.includes('Subject:')) {
+                                const m = lineStr.match(/(?:Subject No:|Subject:)\s*([A-Za-z0-9_\-\s]+)/i);
+                                if (m && m[1]) detectedSubject = m[1].trim().split(/\s+/)[0];
+                            }
+                            if (lineStr.includes('Course/Year:')) {
+                                const m = lineStr.match(/Course\/Year:\s*([A-Za-z0-9_\-\s]+)/i);
+                                if (m && m[1]) detectedCourse = m[1].trim().split(/\s+/)[0];
+                            }
+                        });
+                    }
+
+                    const parsedStudents = [];
+                    const idRegex = /(\d{4}-\d{5})/;
+                    const remarkOptions = ['PASSED', 'FAILED', 'DROPPED', 'PASS', 'FAIL', 'DRP', 'PENDING', 'ACTIVE', 'INC'];
+
+                    fullTextLines.forEach(line => {
+                        const idMatch = line.match(idRegex);
+                        if (!idMatch) return;
+
+                        const studentNo = idMatch[1];
+                        const parts = line.split(/\s+/);
+                        const idIdx = parts.findIndex(p => p.includes(studentNo));
+                        if (idIdx === -1) return;
+
+                        const afterIdTokens = parts.slice(idIdx + 1);
+                        const len = afterIdTokens.length;
+                        if (len < 3) return;
+
+                        let foundRemarks = afterIdTokens[len - 1].toUpperCase();
+                        let foundGrade = null;
+                        let nameEndIdx = len - 1;
+
+                        const isLastTokenRemark = remarkOptions.includes(foundRemarks);
+
+                        if (isLastTokenRemark) {
+                            foundGrade = afterIdTokens[len - 3];
+                            nameEndIdx = len - 3;
+                            
+                            const possiblePercentage = afterIdTokens[len - 4];
+                            if (possiblePercentage && (isPercentageGrade(possiblePercentage) || possiblePercentage.toUpperCase() === 'DRP')) {
+                                nameEndIdx = len - 4;
+                            }
+                        } else {
+                            for (let i = len - 1; i >= 0; i--) {
+                                const token = afterIdTokens[i].toUpperCase();
+                                if (!foundRemarks && remarkOptions.includes(token)) {
+                                    foundRemarks = token;
+                                } else if (foundGrade === null && (isNumericGrade(token) || token === 'DRP')) {
+                                    foundGrade = afterIdTokens[i];
+                                } else if (foundRemarks || foundGrade !== null) {
+                                    nameEndIdx = i + 1;
+                                    break;
+                                }
+                            }
+                        }
+
+                        const name = afterIdTokens.slice(0, nameEndIdx).join(' ').trim();
+                        if (!name) return;
+
+                        let remarks = 'N/A';
+                        if (foundRemarks === 'PASSED' || foundRemarks === 'PASS') remarks = 'Passed';
+                        else if (foundRemarks === 'FAILED' || foundRemarks === 'FAIL' || foundRemarks === 'DROPPED' || foundRemarks === 'DRP') remarks = 'Failed';
+                        else if (foundRemarks === 'PENDING' || foundRemarks === 'ACTIVE' || foundRemarks === 'INC') remarks = 'Pending';
+                        else if (foundGrade) {
+                            const g = parseFloat(foundGrade);
+                            if (!isNaN(g)) {
+                                if (g >= 1.0 && g <= 3.0) remarks = 'Passed';
+                                else if (g > 3.0) remarks = 'Failed';
+                            }
+                        }
+
+                        parsedStudents.push({
+                            name: name,
+                            student_no: studentNo,
+                            serial_no: null,
+                            grade: foundGrade,
+                            remarks: remarks
+                        });
+                    });
+
+                    if (!parsedStudents.length) {
+                        throw new Error('No student records with valid IDs (e.g. 2025-00195) found in the PDF.');
+                    }
+
+                    let sectionCode = '';
+                    if (detectedSubject && detectedCourse) {
+                        sectionCode = `${detectedSubject}-${detectedCourse}`.toUpperCase();
+                    } else if (detectedSubject) {
+                        sectionCode = detectedSubject.toUpperCase();
+                    } else if (detectedCourse) {
+                        sectionCode = detectedCourse.toUpperCase();
+                    } else {
+                        sectionCode = file.name
+                            .replace(/\.pdf$/i, '')
+                            .replace(/[_\s]+/g, '-')
+                            .toUpperCase();
+                    }
+
+                    loadingState.classList.add('hidden');
+                    openReviewModal(file.name, sectionCode, parsedStudents, null);
+
+                } catch (err) {
+                    handleError(err.message || 'Failed to read PDF file.');
+                }
+            };
+
+            reader.onerror = () => handleError('Could not read PDF file.');
+            reader.readAsArrayBuffer(file);
+        };
+
+        // Process Scanned Image File (PNG / JPG / JPEG)
+        const processImageFile = (file) => {
+            uploadState.classList.add('hidden');
+            loadingState.classList.add('hidden');
+            
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const imgDataUrl = evt.target.result;
+                const sectionCode = file.name.replace(/\.[^/.]+$/, '').replace(/[_\s]+/g, '-').toUpperCase();
+
+                // Initial sample rows for coordinator to review/edit
+                const initialRows = [
+                    { name: 'ENTER STUDENT NAME', student_no: '2025-00001', grade: '1.0', remarks: 'Passed' }
+                ];
+
+                openReviewModal(file.name, sectionCode, initialRows, imgDataUrl);
+            };
+
+            reader.onerror = () => handleError('Could not read Image file.');
+            reader.readAsDataURL(file);
+        };
+
+        // 4. Pre-Save Grade Verification & Review Modal Handlers
+        let pendingFile = { filename: '', section: '', students: [] };
+
+        const openReviewModal = (filename, sectionCode, students, imgUrl = null) => {
+            pendingFile = { filename, section: sectionCode, students };
+
+            const reviewModal = document.getElementById('ocrReviewModal');
+            const reviewSectionInput = document.getElementById('reviewSectionInput');
+            const reviewFilenameBadge = document.getElementById('reviewFilenameBadge');
+            const reviewCountBadge = document.getElementById('reviewCountBadge');
+            const reviewImageContainer = document.getElementById('reviewImageContainer');
+            const reviewImgPreview = document.getElementById('reviewImgPreview');
+
+            if (reviewSectionInput) reviewSectionInput.value = sectionCode;
+            if (reviewFilenameBadge) reviewFilenameBadge.textContent = filename;
+            if (reviewCountBadge) reviewCountBadge.textContent = `${students.length} Record(s)`;
+
+            if (imgUrl) {
+                if (reviewImgPreview) reviewImgPreview.src = imgUrl;
+                if (reviewImageContainer) reviewImageContainer.classList.remove('hidden');
+            } else {
+                if (reviewImageContainer) reviewImageContainer.classList.add('hidden');
+            }
+
+            renderReviewTableRows();
+            if (reviewModal) reviewModal.classList.remove('hidden');
+        };
+
+        const closeReviewModal = () => {
+            const reviewModal = document.getElementById('ocrReviewModal');
+            if (reviewModal) reviewModal.classList.add('hidden');
+            if (uploadState) uploadState.classList.remove('hidden');
+            if (ocrFileInput) ocrFileInput.value = '';
+        };
+
+        const renderReviewTableRows = () => {
+            const reviewTableBody = document.getElementById('reviewTableBody');
+            const reviewCountBadge = document.getElementById('reviewCountBadge');
+            if (!reviewTableBody) return;
+
+            reviewTableBody.innerHTML = '';
+            if (reviewCountBadge) reviewCountBadge.textContent = `${pendingFile.students.length} Record(s)`;
+
+            pendingFile.students.forEach((std, i) => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-100 hover:bg-slate-50 transition';
+
+                tr.innerHTML = `
+                    <td class="py-2 px-3 text-center text-xs font-bold text-slate-400">${i + 1}</td>
+                    <td class="py-2 px-3">
+                        <input type="text" value="${std.name || ''}" data-idx="${i}" data-field="name" class="review-input w-full px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" placeholder="Student Full Name" />
+                    </td>
+                    <td class="py-2 px-3">
+                        <input type="text" value="${std.student_no || ''}" data-idx="${i}" data-field="student_no" class="review-input w-full px-2.5 py-1 text-xs font-mono text-slate-700 rounded-lg border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" placeholder="e.g. 2025-00195" />
+                    </td>
+                    <td class="py-2 px-3 text-center">
+                        <input type="text" value="${std.grade !== null ? std.grade : ''}" data-idx="${i}" data-field="grade" class="review-input w-20 text-center px-2 py-1 text-xs font-bold rounded-lg border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" placeholder="1.25" />
+                    </td>
+                    <td class="py-2 px-3 text-center">
+                        <select data-idx="${i}" data-field="remarks" class="review-select text-xs font-bold px-2 py-1 rounded-lg border border-slate-200 focus:outline-none transition">
+                            <option value="Passed" ${std.remarks === 'Passed' ? 'selected' : ''}>Passed</option>
+                            <option value="Failed" ${std.remarks === 'Failed' ? 'selected' : ''}>Failed</option>
+                            <option value="Pending" ${std.remarks === 'Pending' ? 'selected' : ''}>Pending</option>
+                        </select>
+                    </td>
+                    <td class="py-2 px-3 text-center">
+                        <button data-remove-idx="${i}" class="btn-remove-row text-xs text-rose-500 hover:text-rose-700 font-bold px-2 py-1 rounded hover:bg-rose-50 transition">
+                            &times;
+                        </button>
+                    </td>
+                `;
+                reviewTableBody.appendChild(tr);
+            });
+
+            // Bind input update events inside modal table
+            reviewTableBody.querySelectorAll('.review-input').forEach(inp => {
+                inp.addEventListener('input', (e) => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    const field = e.target.dataset.field;
+                    if (pendingFile.students[idx]) {
+                        pendingFile.students[idx][field] = e.target.value;
+                    }
+                });
+            });
+
+            reviewTableBody.querySelectorAll('.review-select').forEach(sel => {
+                sel.addEventListener('change', (e) => {
+                    const idx = parseInt(e.target.dataset.idx);
+                    if (pendingFile.students[idx]) {
+                        pendingFile.students[idx].remarks = e.target.value;
+                    }
+                });
+            });
+
+            reviewTableBody.querySelectorAll('.btn-remove-row').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.dataset.removeIdx);
+                    pendingFile.students.splice(idx, 1);
+                    renderReviewTableRows();
+                });
+            });
+        };
+
+        // Modal Action Buttons
+        const closeReviewModalBtn = document.getElementById('closeReviewModalBtn');
+        const cancelReviewBtn = document.getElementById('cancelReviewBtn');
+        const addReviewRowBtn = document.getElementById('addReviewRowBtn');
+        const confirmSyncBtn = document.getElementById('confirmSyncBtn');
+        const reviewSectionInput = document.getElementById('reviewSectionInput');
+
+        if (closeReviewModalBtn) closeReviewModalBtn.addEventListener('click', closeReviewModal);
+        if (cancelReviewBtn) cancelReviewBtn.addEventListener('click', closeReviewModal);
+
+        if (addReviewRowBtn) {
+            addReviewRowBtn.addEventListener('click', () => {
+                pendingFile.students.push({
+                    name: 'NEW STUDENT',
+                    student_no: '',
+                    grade: '1.0',
+                    remarks: 'Passed'
+                });
+                renderReviewTableRows();
+            });
+        }
+
+        if (confirmSyncBtn) {
+            confirmSyncBtn.addEventListener('click', () => {
+                const targetSection = (reviewSectionInput ? reviewSectionInput.value.trim() : '') || pendingFile.section || 'IMPORTED';
+
+                if (!pendingFile.students.length) {
+                    alert('Please add at least one student row before approving.');
+                    return;
+                }
+
+                // Show loading state and send AJAX request
+                const reviewModal = document.getElementById('ocrReviewModal');
+                if (reviewModal) reviewModal.classList.add('hidden');
+                
+                uploadState.classList.add('hidden');
+                loadingState.classList.remove('hidden');
+                updateProgress(75, 'Synchronizing Database...', 'Saving approved grades to DNSC portal database...');
+
+                const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                
+                fetch('/coordinator/ocr/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        section: targetSection.toUpperCase(),
+                        filename: pendingFile.filename,
+                        students: pendingFile.students
+                    })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.message || 'Database sync error.'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    if (data.success) {
+                        updateProgress(100, 'Import & Sync Completed!', 'Approved grades recorded successfully.');
+                        
+                        const now = new Date();
+                        const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+                        const hours = now.getHours() % 12 || 12;
+                        const timeStr = `Today ${hours}:${String(now.getMinutes()).padStart(2, '0')} ${ampm}`;
+                        
+                        const historyEntry = {
+                            filename: pendingFile.filename,
+                            time: timeStr,
+                            summary: data.summary,
+                            results: data.results
+                        };
+
+                        saveHistoryToStorage(historyEntry);
+
+                        setTimeout(() => {
+                            loadingState.classList.add('hidden');
+                            displayResults(historyEntry);
+                        }, 500);
+
+                        if (window.showToast) window.showToast(`Successfully synced ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Sync Successful');
+                    } else {
+                        throw new Error(data.message || 'Database sync failure.');
+                    }
+                })
+                .catch(err => handleError(err.message || 'Failed to sync approved grades.'));
+            });
+        }
+
+        const isNumericGrade = (val) => {
+            const num = parseFloat(val);
+            return !isNaN(num) && ((num >= 1.0 && num <= 5.0) || (num >= 50 && num <= 100));
+        };
+
+        const isPercentageGrade = (val) => {
+            const num = parseFloat(val);
+            return !isNaN(num) && num >= 50 && num <= 100;
         };
 
         const updateProgress = (pct, title, sub) => {
@@ -601,18 +1040,64 @@
 
             // Cache current list
             currentRoster = entry.results;
+            filteredRoster = currentRoster;
+            currentPage = 1;
             
-            // Render Table Rows
-            renderRosterRows(currentRoster);
+            // Render Table Rows with Pagination
+            updateRosterPagination();
             
             // Clear search field
             if (rosterSearch) rosterSearch.value = '';
         };
 
-        const renderRosterRows = (list) => {
+        const updateRosterPagination = () => {
+            const totalItems = filteredRoster.length;
+            const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIdx = (currentPage - 1) * itemsPerPage;
+            const endIdx = Math.min(startIdx + itemsPerPage, totalItems);
+            const pageItems = filteredRoster.slice(startIdx, endIdx);
+
+            renderRosterRows(pageItems, startIdx);
+
+            if (rosterPaginationInfo) {
+                if (totalItems === 0) {
+                    rosterPaginationInfo.textContent = 'Showing 0 entries';
+                } else {
+                    rosterPaginationInfo.textContent = `Showing ${startIdx + 1} to ${endIdx} of ${totalItems} entries`;
+                }
+            }
+            if (rosterPageIndicator) {
+                rosterPageIndicator.textContent = `Page ${currentPage} of ${totalPages}`;
+            }
+            if (rosterPrevBtn) {
+                rosterPrevBtn.disabled = currentPage <= 1;
+            }
+            if (rosterNextBtn) {
+                rosterNextBtn.disabled = currentPage >= totalPages;
+            }
+        };
+
+        const selectAllRoster = document.getElementById('selectAllRoster');
+        const exportSelectedBtn = document.getElementById('exportSelectedBtn');
+        const exportResultsBtn = document.getElementById('exportResultsBtn');
+
+        if (selectAllRoster) {
+            selectAllRoster.addEventListener('change', (e) => {
+                const chks = document.querySelectorAll('.roster-chk');
+                chks.forEach(c => c.checked = e.target.checked);
+            });
+        }
+
+        const renderRosterRows = (list, offset = 0) => {
+            if (!rosterTableBody) return;
             rosterTableBody.innerHTML = '';
+            if (selectAllRoster) selectAllRoster.checked = false;
+
             if (list.length === 0) {
-                rosterTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-400 text-sm">No matching records found.</td></tr>`;
+                rosterTableBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 text-sm">No matching records found.</td></tr>`;
                 return;
             }
 
@@ -620,12 +1105,12 @@
                 const tr = document.createElement('tr');
                 tr.className = 'border-b border-slate-50 hover:bg-slate-50/50 transition duration-150';
 
-                // Remarks Badge
-                let remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-50 text-slate-400">N/A</span>`;
+                // 3-Color Remarks Badges: Green (Passed), Red (Failed), Amber (Pending)
+                let remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Pending</span>`;
                 if (std.remarks === 'Passed') {
-                    remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">Passed</span>`;
-                } else if (std.remarks === 'Failed') {
-                    remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700">Failed</span>`;
+                    remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Passed</span>`;
+                } else if (std.remarks === 'Failed' || std.remarks === 'Dropped') {
+                    remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">Failed</span>`;
                 }
 
                 // Database Status Badge
@@ -634,7 +1119,10 @@
                     : `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">Matched in Database</span>`;
 
                 tr.innerHTML = `
-                    <td class="py-3 px-4 text-center font-medium text-slate-400">${i + 1}</td>
+                    <td class="py-3 px-4 text-center">
+                        <input type="checkbox" class="roster-chk rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer" data-idx="${offset + i}" />
+                    </td>
+                    <td class="py-3 px-4 text-center font-medium text-slate-400">${offset + i + 1}</td>
                     <td class="py-3 px-4 font-semibold text-slate-800">${std.name}</td>
                     <td class="py-3 px-4 font-mono text-xs text-slate-500">${std.student_no || 'Pending'}</td>
                     <td class="py-3 px-4 text-center font-bold text-slate-700">${std.grade !== null ? std.grade : '-'}</td>
@@ -645,81 +1133,111 @@
             });
         };
 
+        // Pagination Buttons
+        if (rosterPrevBtn) {
+            rosterPrevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    updateRosterPagination();
+                }
+            });
+        }
+        if (rosterNextBtn) {
+            rosterNextBtn.addEventListener('click', () => {
+                const totalPages = Math.ceil(filteredRoster.length / itemsPerPage);
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    updateRosterPagination();
+                }
+            });
+        }
+
         // Search filtering logic
         if (rosterSearch) {
             rosterSearch.addEventListener('input', (e) => {
                 const query = e.target.value.toLowerCase().trim();
+                currentPage = 1;
                 if (!query) {
-                    renderRosterRows(currentRoster);
-                    return;
+                    filteredRoster = currentRoster;
+                } else {
+                    filteredRoster = currentRoster.filter(std => 
+                        std.name.toLowerCase().includes(query) || 
+                        (std.student_no && std.student_no.toLowerCase().includes(query))
+                    );
                 }
-                const filtered = currentRoster.filter(std => 
-                    std.name.toLowerCase().includes(query) || 
-                    (std.student_no && std.student_no.toLowerCase().includes(query))
-                );
-                renderRosterRows(filtered);
+                updateRosterPagination();
             });
         }
 
-        // Export current roster to XLSX using SheetJS
-        const exportResultsBtn = document.getElementById('exportResultsBtn');
+        // Helper function to trigger Excel export using SheetJS
+        const triggerExcelExport = (studentsToExport, exportTitle = 'Exported') => {
+            if (!studentsToExport || studentsToExport.length === 0) {
+                if (window.showToast) window.showToast('No student records selected or available for export.', 'warning', 'Export Unavailable');
+                return;
+            }
+
+            const sectionName = resultsSectionName ? resultsSectionName.textContent.replace(' Grades', '').trim() : 'Imported';
+            const component = resultsComponentTag ? resultsComponentTag.textContent.trim() : 'CWTS';
+            
+            const wb = window.XLSX.utils.book_new();
+            const rows = [
+                ['#', 'Student Name', 'Student No.', 'Section', 'Program / Component', 'Final Grade', 'Remarks']
+            ];
+            
+            studentsToExport.forEach((std, i) => {
+                rows.push([
+                    i + 1,
+                    std.name,
+                    std.student_no || 'Pending',
+                    sectionName,
+                    component,
+                    std.grade !== null ? std.grade : '-',
+                    std.remarks
+                ]);
+            });
+            
+            const ws = window.XLSX.utils.aoa_to_sheet(rows);
+            ws['!cols'] = [
+                { wch: 5 },   // #
+                { wch: 28 },  // Student Name
+                { wch: 15 },  // Student No.
+                { wch: 12 },  // Section
+                { wch: 20 },  // Program
+                { wch: 12 },  // Grade
+                { wch: 12 }   // Remarks
+            ];
+            
+            window.XLSX.utils.book_append_sheet(wb, ws, sectionName);
+            
+            const fileName = `NSTP_Grades_${sectionName}_${exportTitle}_${Date.now().toString().slice(-6)}.xlsx`;
+            window.XLSX.writeFile(wb, fileName);
+            
+            if (window.showToast) window.showToast(`${studentsToExport.length} student record(s) exported successfully.`, 'success', 'Export Completed');
+        };
+
+        // Export All
         if (exportResultsBtn) {
             exportResultsBtn.addEventListener('click', () => {
-                if (!currentRoster || currentRoster.length === 0) {
-                    if (window.showToast) window.showToast('No student records available for export.', 'warning', 'Export Unavailable');
+                triggerExcelExport(currentRoster, 'All');
+            });
+        }
+
+        // Export Selected
+        if (exportSelectedBtn) {
+            exportSelectedBtn.addEventListener('click', () => {
+                const checkedBoxes = document.querySelectorAll('.roster-chk:checked');
+                if (!checkedBoxes.length) {
+                    alert('Please select at least one student checkbox in the table to export.');
                     return;
                 }
-
-                // Filter down to passed students only
-                const passedStudents = currentRoster.filter(std => std.remarks === 'Passed');
-                if (passedStudents.length === 0) {
-                    if (window.showToast) window.showToast('No passed student records available for export.', 'warning', 'Export Unavailable');
-                    return;
-                }
-
-                const sectionName = resultsSectionName.textContent.replace(' Grades', '').trim();
-                const component = resultsComponentTag.textContent.trim();
-                
-                const wb = window.XLSX.utils.book_new();
-                
-                // Add header row
-                const rows = [
-                    ['#', 'Student Name', 'Student No.', 'Section', 'Program / Component', 'Final Grade', 'Remarks', 'Database Match Status']
-                ];
-                
-                passedStudents.forEach((std, i) => {
-                    rows.push([
-                        i + 1,
-                        std.name,
-                        std.student_no || 'Pending',
-                        sectionName,
-                        component,
-                        std.grade !== null ? std.grade : '',
-                        std.remarks,
-                        std.is_new ? 'Newly Registered' : 'Matched in Database'
-                    ]);
+                const selectedStudents = [];
+                checkedBoxes.forEach(chk => {
+                    const idx = parseInt(chk.dataset.idx);
+                    if (filteredRoster[idx]) {
+                        selectedStudents.push(filteredRoster[idx]);
+                    }
                 });
-                
-                const ws = window.XLSX.utils.aoa_to_sheet(rows);
-                
-                // Column widths
-                ws['!cols'] = [
-                    { wch: 5 },   // #
-                    { wch: 28 },  // Student Name
-                    { wch: 15 },  // Student No.
-                    { wch: 12 },  // Section
-                    { wch: 20 },  // Program
-                    { wch: 12 },  // Grade
-                    { wch: 12 },  // Remarks
-                    { wch: 24 }   // DB Status
-                ];
-                
-                window.XLSX.utils.book_append_sheet(wb, ws, sectionName);
-                
-                const fileName = `NSTP_Grades_${sectionName}_${Date.now().toString().slice(-6)}.xlsx`;
-                window.XLSX.writeFile(wb, fileName);
-                
-                if (window.showToast) window.showToast('Roster exported successfully.', 'success', 'Export Completed');
+                triggerExcelExport(selectedStudents, 'Selected');
             });
         }
 

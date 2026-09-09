@@ -17,6 +17,13 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
+        // Proxy requests on 5173 to Laravel on 8000
+        proxy: {
+            '^(?!/@|/resources|/node_modules)': {
+                target: 'http://127.0.0.1:8000',
+                changeOrigin: true,
+            },
+        },
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },
