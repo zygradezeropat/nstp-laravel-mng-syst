@@ -677,7 +677,8 @@ class StudentController extends Controller
                                 str_replace(
                                     [
                                         '_',
-                                        '-'
+                                        '-',
+                                        '.'
                                     ],
                                     ' ',
                                     (string) $value
@@ -1660,7 +1661,92 @@ $middleName
 
 
 // ----------------------------------------------------
-// APPEND MIDDLE NAME TO FIRST NAME
+// FALLBACK: PARSE SINGLE-COLUMN FULL NAME
+// ----------------------------------------------------
+// Handles formats such as:
+// "BERNALES, JOSE RANDY GASCO" -> Last: BERNALES, First: JOSE RANDY GASCO
+// "JOSE RANDY GASCO BERNALES" -> Last: BERNALES, First: JOSE RANDY GASCO
+// ----------------------------------------------------
+if (
+    !$cleanLastName
+    &&
+    !$cleanFirstName
+    &&
+    $fullName
+) {
+
+    $trimmedFullName =
+        trim(
+            $fullName
+        );
+
+
+    if (
+        str_contains(
+            $trimmedFullName,
+            ','
+        )
+    ) {
+
+        $parts =
+            explode(
+                ',',
+                $trimmedFullName,
+                2
+            );
+
+
+        $cleanLastName =
+            trim(
+                $parts[0]
+            );
+
+
+        $cleanFirstName =
+            trim(
+                $parts[1]
+            );
+
+    } else {
+
+        $parts =
+            preg_split(
+                '/\s+/',
+                $trimmedFullName
+            );
+
+
+        if (
+            count($parts) > 1
+        ) {
+
+            $cleanLastName =
+                array_pop(
+                    $parts
+                );
+
+
+            $cleanFirstName =
+                implode(
+                    ' ',
+                    $parts
+                );
+
+        } else {
+
+            $cleanLastName =
+                $trimmedFullName;
+
+
+            $cleanFirstName =
+                $trimmedFullName;
+        }
+    }
+}
+
+
+// ----------------------------------------------------
+// APPEND MIDDLE NAME TO FIRST NAME IF SEPARATE
 // ----------------------------------------------------
 
 $databaseFirstName =

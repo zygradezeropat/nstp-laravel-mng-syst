@@ -238,6 +238,25 @@ class SectionController extends Controller
 
                     /*
                     |--------------------------------------------------------------------------
+                    | Component match check
+                    |--------------------------------------------------------------------------
+                    */
+                    $secComp = !empty($section->component) ? strtoupper(trim($section->component)) : null;
+                    if ($secComp && !empty(trim((string)$student->component))) {
+                        $masterComp = strtoupper(trim((string)$student->component));
+                        if ($masterComp !== $secComp) {
+                            continue;
+                        }
+                    }
+
+                    if (empty(trim((string)$student->component)) && $secComp) {
+                        DB::table('students')->where('id', $student->id)->update(['component' => $secComp]);
+                        $student->component = $secComp;
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
                     | Update class_list_students section name.
                     |--------------------------------------------------------------------------
                     */
@@ -363,6 +382,25 @@ class SectionController extends Controller
 
                     if (!$student) {
                         continue;
+                    }
+
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Component match check
+                    |--------------------------------------------------------------------------
+                    */
+                    $secComp = !empty($section->component) ? strtoupper(trim($section->component)) : null;
+                    if ($secComp && !empty(trim((string)$student->component))) {
+                        $masterComp = strtoupper(trim((string)$student->component));
+                        if ($masterComp !== $secComp) {
+                            continue;
+                        }
+                    }
+
+                    if (empty(trim((string)$student->component)) && $secComp) {
+                        DB::table('students')->where('id', $student->id)->update(['component' => $secComp]);
+                        $student->component = $secComp;
                     }
 
 
@@ -698,6 +736,12 @@ class SectionController extends Controller
 
             'students' =>
                 'required|array',
+
+            'program' =>
+                'nullable|string',
+
+            'component' =>
+                'nullable|string',
         ]);
 
 
@@ -707,6 +751,10 @@ class SectionController extends Controller
 
         $studentsList =
             $data['students'];
+
+
+        $targetComponent = trim($data['program'] ?? $data['component'] ?? '');
+        $targetComponent = $targetComponent !== '' ? strtoupper($targetComponent) : null;
 
 
         DB::beginTransaction();
@@ -910,6 +958,31 @@ class SectionController extends Controller
 
                         /*
                         |--------------------------------------------------------------------------
+                        | NSTP COMPONENT MATCH CHECK
+                        |
+                        | If student already has a non-null component in masterlist,
+                        | they can ONLY be imported into a section matching that component.
+                        |--------------------------------------------------------------------------
+                        */
+                        if ($targetComponent && !empty(trim((string)$studentById->component))) {
+                            $masterComp = strtoupper(trim((string)$studentById->component));
+                            if ($masterComp !== $targetComponent) {
+                                error_log("[ROW " . ($index + 1) . "] REJECTED: Student ID '{$sNo}' component '{$masterComp}' does not match section component '{$targetComponent}'.");
+
+                                $unmatchedRows[] = [
+                                    'row'       => $index + 1,
+                                    'name'      => $sName,
+                                    'studentNo' => $sNo,
+                                    'program'   => $classListCourse,
+                                    'reason'    => "Student is registered under {$masterComp} in the masterlist and cannot be added to a {$targetComponent} section.",
+                                ];
+
+                                continue;
+                            }
+                        }
+
+                        /*
+                        |--------------------------------------------------------------------------
                         | OPTIONAL SAFETY CHECK
                         |
                         | If Student ID exists but Name and Program
@@ -1016,8 +1089,21 @@ class SectionController extends Controller
         $dbStudents->filter(
             function ($student) use (
                 $sName,
-                $classListCourse
+                $classListCourse,
+                $targetComponent
             ) {
+
+                /*
+                |--------------------------------------------------------------------------
+                | STEP 0: NSTP COMPONENT MATCH CHECK
+                |--------------------------------------------------------------------------
+                */
+                if ($targetComponent && !empty(trim((string)$student->component))) {
+                    $masterComp = strtoupper(trim((string)$student->component));
+                    if ($masterComp !== $targetComponent) {
+                        return false;
+                    }
+                }
 
                 /*
                 |--------------------------------------------------------------------------

@@ -1103,6 +1103,7 @@
 
                 // Generate a unique token for this comparison session
                 const uploadToken = 'temp_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                const selectedProgram = document.getElementById('newSecProgram')?.value || 'CWTS';
 
                 // Call backend database comparison endpoint
                 fetch('/api/sections/compare-class-list', {
@@ -1113,6 +1114,7 @@
                     },
                     body: JSON.stringify({
                         token: uploadToken,
+                        program: selectedProgram,
                         students: classStudents
                     })
                 })
@@ -1133,6 +1135,15 @@
                 .catch(err => {
                     console.error("Error connecting to database comparison endpoint:", err);
                     if (label) label.textContent = "Connection to XAMPP database failed";
+                });
+            }
+
+            const newSecProgSelect = document.getElementById('newSecProgram');
+            if (newSecProgSelect) {
+                newSecProgSelect.addEventListener('change', () => {
+                    if (classStudents) {
+                        runComparison();
+                    }
                 });
             }
 

@@ -27,7 +27,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {{-- Left: Section Cards --}}
-        <div class="lg:col-span-2 space-y-4">
+        <div class="lg:col-span-2 space-y-4" id="certSectionCardsContainer">
             @forelse($sections as $sec)
             <div onclick="openCertModal({{ $sec->id }}, '{{ addslashes($sec->code) }}', '{{ addslashes($sec->program) }}', {{ $sec->passed_count }})"
                 class="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm flex items-center gap-4 transition-all duration-200 cursor-pointer hover:border-indigo-300 hover:shadow-md group relative">
@@ -39,15 +39,22 @@
                 </div>
 
                 <div class="flex-1 min-w-0">
-                    <div class="text-slate-900 font-semibold truncate group-hover:text-indigo-600 transition">{{ $sec->code }}</div>
-                    <div class="text-xs text-slate-500 mt-0.5">{{ $sec->program }} &middot; {{ $sec->passed_count }} passed student(s)</div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-slate-900 font-bold truncate group-hover:text-indigo-600 transition text-base">{{ $sec->code }}</span>
+                        <span class="text-[10px] px-2.5 py-0.5 rounded-full font-bold {{ $sec->program === 'CWTS' ? 'bg-indigo-50 text-indigo-700' : ($sec->program === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700') }}">
+                            {{ $sec->program }}
+                        </span>
+                    </div>
+                    <div class="text-xs text-slate-500 mt-1 flex items-center gap-1.5 truncate">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-slate-400 shrink-0">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                       
+                    </div>
+                    <div class="text-xs font-semibold text-emerald-600 mt-1">
+                        {{ $sec->passed_count }} passed student(s) ready
+                    </div>
                 </div>
-
-                @if($sec->passed_count > 0)
-                <span class="inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0">Ready</span>
-                @else
-                <span class="inline-flex items-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-50 text-slate-400 shrink-0">No Passed Students</span>
-                @endif
 
                 <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
                     <form action="{{ route('coordinator.sections.delete', $sec->id) }}" method="POST"
@@ -68,12 +75,20 @@
                 </div>
             </div>
             @empty
-            <div class="bg-white rounded-2xl border border-slate-100 p-10 shadow-sm flex flex-col items-center justify-center text-center text-slate-400">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-12 h-12 text-slate-300 mb-3">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                </svg>
-                <p class="font-semibold text-slate-700">No active sections found.</p>
-                <p class="text-xs text-slate-400 mt-1 max-w-sm">Import an XLSX file of grades to create section rosters.</p>
+            <div class="bg-white rounded-2xl border border-slate-100 p-10 shadow-sm flex flex-col items-center justify-center text-center text-slate-400 space-y-3">
+                <div class="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-7 h-7">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                </div>
+                <p class="font-bold text-slate-800 text-base">No Processed OCR Grade Sheets Found</p>
+                <p class="text-xs text-slate-500 max-w-md leading-relaxed">Certificates are issued after grade sheets are uploaded and processed. Upload an XLSX or PDF grade sheet in the <strong>OCR Grade Import</strong> module to generate certificates.</p>
+                <a href="{{ route('coordinator.ocr') }}" class="mt-2 inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                    Go to OCR Grade Import
+                </a>
             </div>
             @endforelse
         </div>
@@ -428,7 +443,7 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
 });
 
 // ── Cert Modal Open/Close ──────────────────────────────────────────────────────
-function openCertModal(sectionId, sectionCode, program, passedCount) {
+function openCertModal(sectionId, sectionCode, program, passedCount, ocrEntry = null) {
     activeSectionId      = sectionId;
     activeSectionName    = sectionCode;
     selectedTemplateId   = null;
@@ -454,15 +469,41 @@ function openCertModal(sectionId, sectionCode, program, passedCount) {
     list.innerHTML = '<li class="text-center text-slate-400 text-xs py-6 animate-pulse">Loading students…</li>';
     document.getElementById('certRosterCount').textContent = '';
 
-    fetch(`/coordinator/certificates/section/${sectionId}`)
+    const handleRosterFallback = () => {
+        if (ocrEntry && ocrEntry.results && ocrEntry.results.length > 0) {
+            activeRosterStudents = ocrEntry.results
+                .filter(r => {
+                    const rem = (r.remarks || '').toLowerCase();
+                    return rem === 'passed' || rem.startsWith('pass') || rem === 'p';
+                })
+                .map(r => ({
+                    student_no: r.student_no || r.student_id || '',
+                    serial_no:  r.serial_no || '',
+                    name:       r.name || r.student_name || '',
+                    course:     r.course || 'BSIT',
+                    component:  program,
+                    grade:      r.grade || '1.0'
+                }));
+            activeSchoolYear = '2025-2026';
+            renderRosterList();
+        } else {
+            list.innerHTML = '<li class="text-center text-rose-400 text-xs py-6">Failed to load roster.</li>';
+        }
+    };
+
+    fetch(`/coordinator/certificates/section/${encodeURIComponent(sectionId)}`)
         .then(r => r.json())
         .then(data => {
-            activeRosterStudents = data.students || [];
-            activeSchoolYear     = data.school_year || '2025-2026';
-            renderRosterList();
+            if (data.students && data.students.length > 0) {
+                activeRosterStudents = data.students;
+                activeSchoolYear     = data.school_year || '2025-2026';
+                renderRosterList();
+            } else {
+                handleRosterFallback();
+            }
         })
         .catch(() => {
-            list.innerHTML = '<li class="text-center text-rose-400 text-xs py-6">Failed to load roster.</li>';
+            handleRosterFallback();
         });
 }
 
@@ -505,7 +546,7 @@ function renderRosterList() {
             <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-slate-800 truncate">${std.name}</div>
                 <div class="flex items-center gap-1.5 mt-0.5">
-                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Serial:</span>
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Student ID:</span>
                     <input type="text" value="${std.serial_no || std.student_no || ''}" placeholder="Enter Serial No" 
                         class="student-no-input bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-[10px] text-slate-700 font-mono font-semibold focus:outline-none focus:border-indigo-400 focus:bg-white w-32 transition" />
                 </div>
@@ -661,6 +702,122 @@ document.getElementById('certModal').addEventListener('click', function(e) {
 });
 document.getElementById('successActionModal').addEventListener('click', function(e) {
     if (e.target === this) closeSuccessActionModal();
+});
+
+// ── Render OCR Grade History Cards ──────────────────────────────────────────────
+function renderCertCardsFromStorage() {
+    const container = document.getElementById('certSectionCardsContainer');
+    if (!container) return;
+
+    const stored = localStorage.getItem('NSTP_OCR_HISTORY');
+    let history = [];
+    try {
+        history = stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        history = [];
+    }
+
+    if (!history.length) {
+        return; // Retain server-side cards if no client storage history exists
+    }
+
+    container.innerHTML = '';
+
+    history.forEach((entry, idx) => {
+        const secCode = entry.summary?.section || 'IMPORTED';
+        const component = entry.summary?.component || 'CWTS';
+        const passedCount = entry.summary?.passed !== undefined ? entry.summary.passed : (entry.summary?.total || 0);
+        const filename = entry.filename || (secCode + '_grades.xlsx');
+        const importedAt = entry.time || 'Recently Imported';
+
+        let badgeClass = 'bg-indigo-50 text-indigo-700';
+        if (component === 'LTS') badgeClass = 'bg-emerald-50 text-emerald-700';
+        if (component === 'ROTC') badgeClass = 'bg-rose-50 text-rose-700';
+
+        const card = document.createElement('div');
+        card.className = 'bg-white rounded-2xl border border-slate-100 p-5 shadow-sm flex items-center gap-4 transition-all duration-200 cursor-pointer hover:border-indigo-300 hover:shadow-md group relative';
+
+        const safeSecCode = escapeHtml(secCode);
+        const safeComponent = escapeHtml(component);
+        const safeFilename = escapeHtml(filename);
+        const safeImportedAt = escapeHtml(importedAt);
+
+        card.innerHTML = `
+            <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-600 to-blue-500 flex items-center justify-center text-white shadow shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.62 48.62 0 0112 20.904a48.62 48.62 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 017.882 5.84 50.57 50.57 0 00-2.658.813M4.26 10.147a49.621 49.621 0 0115.482 0" />
+                </svg>
+            </div>
+
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                    <span class="text-slate-900 font-bold truncate group-hover:text-indigo-600 transition text-base">${safeSecCode}</span>
+                    <span class="text-[10px] px-2.5 py-0.5 rounded-full font-bold ${badgeClass}">
+                        ${safeComponent}
+                    </span>
+                </div>
+               
+                <div class="text-xs font-semibold text-emerald-600 mt-1">
+                    ${passedCount} passed student(s) ready
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 shrink-0" onclick="event.stopPropagation()">
+                <button type="button" onclick="deleteOcrCertCard(${idx}, '${safeSecCode}')" class="p-1.5 rounded-lg border border-rose-200 text-rose-500 hover:bg-rose-50 hover:border-rose-400 transition" title="Delete Record">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                    </svg>
+                </button>
+                <button type="button"
+                    onclick="triggerCardModal(${idx})"
+                    class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-slate-900 text-white hover:bg-slate-700 transition shadow-sm">
+                    Generate
+                </button>
+            </div>
+        `;
+
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('button')) return;
+            openCertModal(secCode, secCode, component, passedCount, entry);
+        });
+
+        container.appendChild(card);
+    });
+}
+
+function triggerCardModal(idx) {
+    const stored = localStorage.getItem('NSTP_OCR_HISTORY');
+    let history = stored ? JSON.parse(stored) : [];
+    const entry = history[idx];
+    if (entry) {
+        const secCode = entry.summary?.section || 'IMPORTED';
+        const component = entry.summary?.component || 'CWTS';
+        const passedCount = entry.summary?.passed !== undefined ? entry.summary.passed : (entry.summary?.total || 0);
+        openCertModal(secCode, secCode, component, passedCount, entry);
+    }
+}
+
+function deleteOcrCertCard(idx, secCode) {
+    if (!confirm(`Delete section "${secCode}" from certificates history?`)) return;
+    const stored = localStorage.getItem('NSTP_OCR_HISTORY');
+    let history = stored ? JSON.parse(stored) : [];
+    history.splice(idx, 1);
+    localStorage.setItem('NSTP_OCR_HISTORY', JSON.stringify(history));
+    renderCertCardsFromStorage();
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    renderCertCardsFromStorage();
 });
 </script>
 @endpush

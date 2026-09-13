@@ -65,6 +65,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/archive', [CoordinatorController::class, 'archive'])->name('archive');
         Route::get('/audit', [CoordinatorController::class, 'audit'])->name('audit');
         Route::get('/reports', [CoordinatorController::class, 'reports'])->name('reports');
+        Route::get('/reports/export-pdf', [CoordinatorController::class, 'exportReportPdf'])->name('reports.export_pdf');
     });
 
     // ── Instructor Pages ─────────────────────────────────────────────────────────

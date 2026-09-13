@@ -151,8 +151,11 @@ class Student extends Model
             }
         }
 
-        // Sync both student record and enrollment status/grade
+        // Sync both student record and enrollment status/grade/component
         $studentUpdates = [];
+        if (empty(trim((string)$student->component)) && !empty($section->component)) {
+            $studentUpdates['component'] = strtoupper(trim($section->component));
+        }
         $gradeEnum = $status === 'Passed' ? 'pass' : ($status === 'Failed' ? 'fail' : null);
         if ($gradeEnum) {
             $studentUpdates['grade'] = $gradeEnum;

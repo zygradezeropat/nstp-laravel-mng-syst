@@ -796,13 +796,40 @@ class CoordinatorController extends Controller
     {
         $this->autoSeedTemplates();
 
-        // Fetch all sections with their student count and component
-        $sections = Section::with('instructor')->get()->map(function($s) {
+        // Fetch OCR Grade Import audit logs to base certificates on processed OCR grade sheets
+        $ocrLogs = AuditLog::where('action', 'Imported Grades')
+            ->orderBy('performed_at', 'desc')
+            ->get();
+
+        $ocrSectionNames = [];
+        $ocrMetadata = [];
+
+        foreach ($ocrLogs as $log) {
+            $secName = $log->target;
+            if (!isset($ocrMetadata[$secName])) {
+                preg_match('/from file: ([^\.]+?\.[a-zA-Z0-9]+)/i', $log->details, $fnMatches);
+                $filename = $fnMatches[1] ?? ($secName . '_ocr_grades.xlsx');
+
+                $ocrMetadata[$secName] = [
+                    'filename'     => $filename,
+                    'imported_at'  => $log->performed_at->diffForHumans(),
+                    'performed_at' => $log->performed_at,
+                ];
+                $ocrSectionNames[] = $secName;
+            }
+        }
+
+        $sectionsQuery = Section::with('instructor');
+        $allSections = $sectionsQuery->get();
+
+        $sections = $allSections->map(function($s) use ($ocrMetadata) {
             $studentCount = \DB::table('students')
                 ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
                 ->where('enrollments.section_id', $s->id)
                 ->where('enrollments.status', 'Passed')
                 ->count();
+
+            $meta = $ocrMetadata[$s->section_name] ?? null;
 
             return (object)[
                 'id'           => $s->id,
@@ -811,6 +838,9 @@ class CoordinatorController extends Controller
                 'schoolYear'   => $s->school_year,
                 'passed_count' => $studentCount,
                 'instructor'   => $s->instructor_name,
+                'filename'     => $meta['filename'] ?? ($s->section_name . '_ocr_grades.xlsx'),
+                'imported_at'  => $meta['imported_at'] ?? 'OCR Import Processed',
+                'is_ocr'       => !empty($meta),
             ];
         })->filter(function($s) {
             return $s->passed_count > 0;
@@ -842,11 +872,28 @@ class CoordinatorController extends Controller
 
     public function getSectionCertificates($sectionId)
     {
-        $section = Section::findOrFail($sectionId);
+        $section = null;
+        if (is_numeric($sectionId)) {
+            $section = Section::find($sectionId);
+        }
+        if (!$section) {
+            $section = Section::where('section_name', $sectionId)->first();
+        }
+        if (!$section) {
+            $section = Section::where('section_name', 'like', $sectionId)->first();
+        }
+
+        if (!$section) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Section not found',
+                'students' => []
+            ], 404);
+        }
 
         $students = \DB::table('students')
             ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
-            ->where('enrollments.section_id', $sectionId)
+            ->where('enrollments.section_id', $section->id)
             ->where('enrollments.status', 'Passed')
             ->select([
                 'students.student_id',
@@ -872,6 +919,7 @@ class CoordinatorController extends Controller
 
         return response()->json([
             'success'      => true,
+            'section_id'   => $section->id,
             'section_name' => $section->section_name,
             'school_year'  => $section->school_year,
             'students'     => $students,
@@ -968,12 +1016,25 @@ class CoordinatorController extends Controller
     {
         $request->validate([
             'template_id' => 'required|integer',
-            'section_id'  => 'required|integer',
+            'section_id'  => 'required',
             'student_nos' => 'nullable|array',
         ]);
 
-        $template   = CertificateTemplate::findOrFail($request->template_id);
-        $section    = Section::findOrFail($request->section_id);
+        $template = CertificateTemplate::findOrFail($request->template_id);
+        
+        $secIdentifier = $request->section_id;
+        $section = is_numeric($secIdentifier) ? Section::find($secIdentifier) : null;
+        if (!$section) {
+            $section = Section::where('section_name', $secIdentifier)->first();
+        }
+        if (!$section) {
+            $section = Section::where('section_name', 'like', $secIdentifier)->first();
+        }
+
+        if (!$section) {
+            return response()->json(['error' => 'Section not found.'], 404);
+        }
+
         $issuedDate = now()->format('F d, Y');
         $schoolYear = $section->school_year ?? '2025-2026';
 
@@ -1221,9 +1282,208 @@ class CoordinatorController extends Controller
         return view('coordinator.audit', compact('logs'));
     }
 
-    public function reports()
+    public function reports(Request $request)
     {
-        return view('coordinator.reports');
+        $schoolYears = Section::orderBy('school_year', 'desc')
+            ->pluck('school_year')
+            ->unique()
+            ->filter()
+            ->values()
+            ->toArray();
+        if (empty($schoolYears)) {
+            $schoolYears = ['2025-2026', '2024-2025'];
+        }
+
+        $sections = Section::orderBy('section_name')->get();
+
+        $reportType = $request->query('report_type', 'student_performance');
+        $program    = $request->query('program', 'all');
+        $schoolYear = $request->query('school_year', 'all');
+        $sectionId  = $request->query('section_id', 'all');
+        $status     = $request->query('status', 'all');
+
+        $allStudents = $this->getFilteredStudentPerformance($program, $schoolYear, $sectionId, $status);
+
+        // Paginate records to 10 per page
+        $currentPage = \Illuminate\Pagination\Paginator::resolveCurrentPage();
+        $perPage = 10;
+        $currentPageItems = $allStudents->slice(($currentPage - 1) * $perPage, $perPage)->values();
+        $students = new \Illuminate\Pagination\LengthAwarePaginator(
+            $currentPageItems,
+            $allStudents->count(),
+            $perPage,
+            $currentPage,
+            ['path' => $request->url(), 'query' => $request->query()]
+        );
+
+        if ($request->wantsJson() || $request->query('format') === 'json') {
+            return response()->json([
+                'success'  => true,
+                'count'    => $allStudents->count(),
+                'students' => $students,
+            ]);
+        }
+
+        return view('coordinator.reports', compact(
+            'schoolYears', 'sections', 'students', 'allStudents',
+            'reportType', 'program', 'schoolYear', 'sectionId', 'status'
+        ));
+    }
+
+    public function exportReportPdf(Request $request)
+    {
+        $reportType = $request->query('report_type', 'student_performance');
+        $program    = $request->query('program', 'all');
+        $schoolYear = $request->query('school_year', 'all');
+        $sectionId  = $request->query('section_id', 'all');
+        $status     = $request->query('status', 'all');
+
+        $students = $this->getFilteredStudentPerformance($program, $schoolYear, $sectionId, $status);
+
+        $reportTitle = match ($reportType) {
+            'terminal'            => 'NSTP Terminal Report',
+            'masterlist'          => 'Master Student Enrollment List',
+            'consolidated_grades' => 'Consolidated Grade Sheet',
+            'financial'           => 'Financial Summary Report',
+            default               => 'Enrolled Student Performance Report',
+        };
+
+        $generatedAt = now()->format('F d, Y h:i A');
+
+        $passedCount  = $students->where('remarks', 'Passed')->count();
+        $failedCount  = $students->where('remarks', 'Failed')->count();
+        $pendingCount = $students->where('remarks', 'Pending')->count();
+        $totalCount   = $students->count();
+
+        $pdf = Pdf::loadView('coordinator.pdf.report_pdf', compact(
+            'reportTitle', 'reportType', 'students', 'program', 'schoolYear',
+            'sectionId', 'status', 'generatedAt', 'passedCount', 'failedCount',
+            'pendingCount', 'totalCount'
+        ))->setPaper('letter', 'portrait');
+
+        $filename = Str::slug($reportTitle) . '_' . date('Ymd_His') . '.pdf';
+
+        // Record Audit Log
+        $user = auth()->user();
+        AuditLog::record(
+            'Exported Report PDF',
+            'Reports',
+            $reportTitle,
+            "Coordinator " . ($user ? $user->name : 'User') . " exported report '{$reportTitle}' PDF with {$totalCount} student records.",
+            'system',
+            ['username' => $user->name ?? 'Coordinator', 'email' => $user->email ?? 'coordinator@dnsc.edu.ph', 'role' => 'coordinator']
+        );
+
+        return $pdf->download($filename);
+    }
+
+    private function getFilteredStudentPerformance($program = 'all', $schoolYear = 'all', $sectionId = 'all', $status = 'all')
+    {
+        $query = Student::join('enrollments', 'students.id', '=', 'enrollments.student_id')
+            ->join('sections', 'enrollments.section_id', '=', 'sections.id')
+            ->select([
+                'students.id as db_id',
+                'students.student_id',
+                'students.serial_no',
+                'students.first_name',
+                'students.middle_name',
+                'students.last_name',
+                'students.course',
+                'students.year_level',
+                'students.component as student_component',
+                'students.enrollment_status',
+                'students.grade as student_grade',
+                'students.numerical_grade as student_num_grade',
+                'students.sex',
+                'students.email',
+                'sections.section_name',
+                'sections.component as section_component',
+                'sections.school_year',
+                'sections.semester',
+                'enrollments.final_grade as enrollment_final_grade',
+                'enrollments.status as enrollment_status_override',
+            ])
+            ->whereNull('students.deleted_at');
+
+        if ($program !== 'all') {
+            $query->where(function($q) use ($program) {
+                $q->where('sections.component', $program)
+                  ->orWhere('students.component', $program);
+            });
+        }
+
+        if ($schoolYear !== 'all') {
+            $query->where('sections.school_year', $schoolYear);
+        }
+
+        if ($sectionId !== 'all') {
+            if (is_numeric($sectionId)) {
+                $query->where('sections.id', $sectionId);
+            } else {
+                $query->where('sections.section_name', $sectionId);
+            }
+        }
+
+        $records = $query->orderBy('students.last_name')->get();
+
+        $results = $records->map(function ($s) {
+            $studentNo = !empty($s->student_id) ? $s->student_id : 'N/A';
+            $firstName = trim($s->first_name ?? '');
+            $middleName = trim($s->middle_name ?? '');
+            $lastName = trim($s->last_name ?? '');
+
+            if ($middleName && !str_ends_with(strtolower($firstName), strtolower($middleName))) {
+                $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleName);
+            } else {
+                $fullName = trim($lastName . ', ' . $firstName);
+            }
+
+            $numGrade = $s->enrollment_final_grade !== null ? $s->enrollment_final_grade : $s->student_num_grade;
+            $numGradeVal = is_numeric($numGrade) ? floatval($numGrade) : null;
+            $numGradeFormatted = $numGradeVal !== null ? number_format($numGradeVal, 2) : 'N/A';
+
+            $remarks = 'Pending';
+            $statusOverride = $s->enrollment_status_override;
+            if (in_array($statusOverride, ['Passed', 'Failed', 'Dropped', 'Pending'])) {
+                $remarks = $statusOverride;
+            } elseif ($s->student_grade === 'pass') {
+                $remarks = 'Passed';
+            } elseif ($s->student_grade === 'fail') {
+                $remarks = 'Failed';
+            } elseif ($numGradeVal !== null) {
+                if ($numGradeVal >= 1.0 && $numGradeVal <= 3.0) {
+                    $remarks = 'Passed';
+                } elseif ($numGradeVal > 3.0 && $numGradeVal <= 5.0) {
+                    $remarks = 'Failed';
+                }
+            }
+
+            $comp = $s->section_component ?: ($s->student_component ?: 'CWTS');
+
+            return (object)[
+                'db_id'        => $s->db_id,
+                'student_no'   => $studentNo,
+                'serial_no'    => $s->serial_no ?: 'N/A',
+                'name'         => $fullName,
+                'course'       => $s->course ?: 'BSIT',
+                'program'      => $comp,
+                'section'      => $s->section_name ?: 'Unassigned',
+                'school_year'  => $s->school_year ?: '2025-2026',
+                'semester'     => $s->semester ?: '1st Semester',
+                'grade'        => $numGradeFormatted,
+                'num_grade'    => $numGradeVal,
+                'remarks'      => $remarks,
+                'email'        => $s->email ?: 'N/A',
+            ];
+        });
+
+        if ($status !== 'all') {
+            $results = $results->filter(function($item) use ($status) {
+                return strtolower($item->remarks) === strtolower($status);
+            })->values();
+        }
+
+        return $results;
     }
 
     public function sectionStudents($sectionCode)
@@ -1325,25 +1585,67 @@ class CoordinatorController extends Controller
         \DB::beginTransaction();
 
         try {
-            // 1. Find or create Section
+            // 1. Find or resolve Section
             $section = Section::where('section_name', $sectionName)->first();
             if (!$section) {
-                // Determine component prefix (CWTS, LTS, ROTC)
-                $component = 'CWTS';
-                $scUpper = strtoupper($sectionName);
-                if (str_contains($scUpper, 'ROTC')) {
-                    $component = 'ROTC';
-                } elseif (str_contains($scUpper, 'LTS')) {
-                    $component = 'LTS';
+                // Check if students in payload are already enrolled in an existing section
+                $sectionCounts = [];
+
+                foreach ($studentsList as $row) {
+                    $rawName = trim($row['name'] ?? '');
+                    $studentNo = $row['student_no'] ?? null;
+                    if (empty($rawName) && empty($studentNo)) {
+                        continue;
+                    }
+
+                    $student = null;
+                    if ($studentNo) {
+                        $student = Student::where('student_id', $studentNo)->first();
+                    }
+                    if (!$student && !empty($rawName)) {
+                        $parsedName = Student::parseName($rawName);
+                        $student = Student::where('last_name', 'like', $parsedName['last_name'])
+                            ->where('first_name', 'like', $parsedName['first_name'])
+                            ->first();
+                    }
+
+                    if ($student) {
+                        $enrolledSecIds = \DB::table('enrollments')
+                            ->where('student_id', $student->id)
+                            ->pluck('section_id');
+
+                        foreach ($enrolledSecIds as $secId) {
+                            $sectionCounts[$secId] = ($sectionCounts[$secId] ?? 0) + 1;
+                        }
+                    }
                 }
 
-                $section = Section::create([
-                    'section_name' => $sectionName,
-                    'component'    => $component,
-                    'school_year'  => '2025-2026',
-                    'semester'     => '1st Semester',
-                    'status'       => 'Active',
-                ]);
+                if (!empty($sectionCounts)) {
+                    arsort($sectionCounts);
+                    $mostCommonSectionId = array_key_first($sectionCounts);
+                    if ($mostCommonSectionId) {
+                        $section = Section::find($mostCommonSectionId);
+                    }
+                }
+
+                // If no existing section was matched, create a new section
+                if (!$section) {
+                    $component = 'CWTS';
+                    $scUpper = strtoupper($sectionName);
+                    if (str_contains($scUpper, 'ROTC')) {
+                        $component = 'ROTC';
+                    } elseif (str_contains($scUpper, 'LTS')) {
+                        $component = 'LTS';
+                    }
+
+                    $section = Section::create([
+                        'section_name' => $sectionName,
+                        'component'    => $component,
+                        'school_year'  => '2025-2026',
+                        'semester'     => '1st Semester',
+                        'status'       => 'Active',
+                    ]);
+                }
             }
 
             // 2. Process each student row
@@ -1498,6 +1800,7 @@ class CoordinatorController extends Controller
                     'grade'      => $rawGrade,
                     'remarks'    => $remarks,
                     'is_new'     => $isNew,
+                    'email'      => $student->email ?? null,
                 ];
             }
 

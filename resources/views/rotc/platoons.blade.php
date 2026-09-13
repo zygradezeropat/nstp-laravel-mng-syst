@@ -574,6 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     },
                     body: JSON.stringify({
                         token: uploadToken,
+                        program: 'ROTC',
                         students: classStudents
                     })
                 })

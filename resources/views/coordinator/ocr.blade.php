@@ -472,7 +472,7 @@
 
         const formatChedExcelRow = (std, sectionName = '', componentName = '', timeStr = '') => {
             const parsed = parseFullName(std.name);
-            const email = std.email || (std.student_no ? `${std.student_no}@dnsc.edu.ph` : 'N/A');
+            const email = (std.email && std.email !== 'N/A' && std.email.trim() !== '') ? std.email.trim() : 'N/A';
             const now = new Date();
             const defaultTimestamp = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
             const timestamp = std.created_at || timeStr || defaultTimestamp;
