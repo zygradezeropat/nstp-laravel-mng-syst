@@ -805,12 +805,13 @@ class CoordinatorController extends Controller
         $ocrMetadata = [];
 
         foreach ($ocrLogs as $log) {
-            $secName = $log->target;
-            if (!isset($ocrMetadata[$secName])) {
-                preg_match('/from file: ([^\.]+?\.[a-zA-Z0-9]+)/i', $log->details, $fnMatches);
-                $filename = $fnMatches[1] ?? ($secName . '_ocr_grades.xlsx');
+            $secName = trim($log->target);
+            $upperSec = strtoupper($secName);
+            if (!isset($ocrMetadata[$upperSec])) {
+                preg_match('/from file:\s*([^\r\n\t]+?)(?:\.\s*Total:|$)/i', $log->details, $fnMatches);
+                $filename = isset($fnMatches[1]) ? trim($fnMatches[1]) : ($secName . '_ocr_grades.xlsx');
 
-                $ocrMetadata[$secName] = [
+                $ocrMetadata[$upperSec] = [
                     'filename'     => $filename,
                     'imported_at'  => $log->performed_at->diffForHumans(),
                     'performed_at' => $log->performed_at,
@@ -823,27 +824,33 @@ class CoordinatorController extends Controller
         $allSections = $sectionsQuery->get();
 
         $sections = $allSections->map(function($s) use ($ocrMetadata) {
-            $studentCount = \DB::table('students')
+            $passedCount = \DB::table('students')
                 ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
                 ->where('enrollments.section_id', $s->id)
                 ->where('enrollments.status', 'Passed')
                 ->count();
 
-            $meta = $ocrMetadata[$s->section_name] ?? null;
+            $totalStudents = \DB::table('enrollments')
+                ->where('section_id', $s->id)
+                ->count();
+
+            $upperSec = strtoupper(trim($s->section_name));
+            $meta = $ocrMetadata[$upperSec] ?? null;
 
             return (object)[
-                'id'           => $s->id,
-                'code'         => $s->section_name,
-                'program'      => $s->component,
-                'schoolYear'   => $s->school_year,
-                'passed_count' => $studentCount,
-                'instructor'   => $s->instructor_name,
-                'filename'     => $meta['filename'] ?? ($s->section_name . '_ocr_grades.xlsx'),
-                'imported_at'  => $meta['imported_at'] ?? 'OCR Import Processed',
-                'is_ocr'       => !empty($meta),
+                'id'             => $s->id,
+                'code'           => $s->section_name,
+                'program'        => $s->component,
+                'schoolYear'     => $s->school_year,
+                'passed_count'   => $passedCount,
+                'total_students' => $totalStudents,
+                'instructor'     => $s->instructor_name,
+                'filename'       => $meta['filename'] ?? ($s->section_name . '_grades.xlsx'),
+                'imported_at'    => $meta['imported_at'] ?? 'Imported Grade Sheet',
+                'is_ocr'         => !empty($meta),
             ];
         })->filter(function($s) {
-            return $s->passed_count > 0;
+            return $s->passed_count > 0 || $s->total_students > 0 || $s->is_ocr;
         })->values();
 
         $templates = CertificateTemplate::where('is_active', true)->get();
@@ -1588,64 +1595,21 @@ class CoordinatorController extends Controller
             // 1. Find or resolve Section
             $section = Section::where('section_name', $sectionName)->first();
             if (!$section) {
-                // Check if students in payload are already enrolled in an existing section
-                $sectionCounts = [];
-
-                foreach ($studentsList as $row) {
-                    $rawName = trim($row['name'] ?? '');
-                    $studentNo = $row['student_no'] ?? null;
-                    if (empty($rawName) && empty($studentNo)) {
-                        continue;
-                    }
-
-                    $student = null;
-                    if ($studentNo) {
-                        $student = Student::where('student_id', $studentNo)->first();
-                    }
-                    if (!$student && !empty($rawName)) {
-                        $parsedName = Student::parseName($rawName);
-                        $student = Student::where('last_name', 'like', $parsedName['last_name'])
-                            ->where('first_name', 'like', $parsedName['first_name'])
-                            ->first();
-                    }
-
-                    if ($student) {
-                        $enrolledSecIds = \DB::table('enrollments')
-                            ->where('student_id', $student->id)
-                            ->pluck('section_id');
-
-                        foreach ($enrolledSecIds as $secId) {
-                            $sectionCounts[$secId] = ($sectionCounts[$secId] ?? 0) + 1;
-                        }
-                    }
+                $component = 'CWTS';
+                $scUpper = strtoupper($sectionName);
+                if (str_contains($scUpper, 'ROTC')) {
+                    $component = 'ROTC';
+                } elseif (str_contains($scUpper, 'LTS')) {
+                    $component = 'LTS';
                 }
 
-                if (!empty($sectionCounts)) {
-                    arsort($sectionCounts);
-                    $mostCommonSectionId = array_key_first($sectionCounts);
-                    if ($mostCommonSectionId) {
-                        $section = Section::find($mostCommonSectionId);
-                    }
-                }
-
-                // If no existing section was matched, create a new section
-                if (!$section) {
-                    $component = 'CWTS';
-                    $scUpper = strtoupper($sectionName);
-                    if (str_contains($scUpper, 'ROTC')) {
-                        $component = 'ROTC';
-                    } elseif (str_contains($scUpper, 'LTS')) {
-                        $component = 'LTS';
-                    }
-
-                    $section = Section::create([
-                        'section_name' => $sectionName,
-                        'component'    => $component,
-                        'school_year'  => '2025-2026',
-                        'semester'     => '1st Semester',
-                        'status'       => 'Active',
-                    ]);
-                }
+                $section = Section::create([
+                    'section_name' => $sectionName,
+                    'component'    => $component,
+                    'school_year'  => '2025-2026',
+                    'semester'     => '1st Semester',
+                    'status'       => 'Active',
+                ]);
             }
 
             // 2. Process each student row
@@ -1773,13 +1737,32 @@ class CoordinatorController extends Controller
                     ->where('section_id', $section->id)
                     ->first();
 
+                // Resolve serial number conflict to prevent SQL 1062 unique key violation
+                $finalSerial = $serialNo;
+                if (!empty($finalSerial)) {
+                    $serialOwner = \DB::table('enrollments')
+                        ->where('serial_number', $finalSerial)
+                        ->when($existingEnrollment, function($q) use ($existingEnrollment) {
+                            return $q->where('id', '!=', $existingEnrollment->id);
+                        })
+                        ->first();
+
+                    if ($serialOwner) {
+                        if ($serialOwner->student_id == $student->id) {
+                            \DB::table('enrollments')->where('id', $serialOwner->id)->update(['serial_number' => null]);
+                        } else {
+                            $finalSerial = null;
+                        }
+                    }
+                }
+
                 if ($existingEnrollment) {
                     \DB::table('enrollments')
                         ->where('id', $existingEnrollment->id)
                         ->update([
                             'final_grade'   => $gradeNum,
                             'status'        => $enrollmentStatus,
-                            'serial_number' => $serialNo ?: $existingEnrollment->serial_number,
+                            'serial_number' => $finalSerial ?: $existingEnrollment->serial_number,
                             'updated_at'    => now(),
                         ]);
                 } else {
@@ -1788,7 +1771,7 @@ class CoordinatorController extends Controller
                         'section_id'    => $section->id,
                         'final_grade'   => $gradeNum,
                         'status'        => $enrollmentStatus,
-                        'serial_number' => $serialNo,
+                        'serial_number' => $finalSerial,
                         'created_at'    => now(),
                         'updated_at'    => now(),
                     ]);
@@ -2090,7 +2073,8 @@ class CoordinatorController extends Controller
         $section = Section::findOrFail($id);
         $sectionName = $section->section_name;
 
-        // Clean up from class_list_students
+        // Clean up enrollments and class_list_students
+        \DB::table('enrollments')->where('section_id', $section->id)->delete();
         \DB::table('class_list_students')->where('section_name', $sectionName)->delete();
 
         $section->delete();

@@ -49,7 +49,9 @@
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5 text-slate-400 shrink-0">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                         </svg>
-                       
+                        <span class="truncate font-medium text-slate-600" title="{{ $sec->filename }}">{{ $sec->filename }}</span>
+                        <span class="text-slate-300">&middot;</span>
+                        <span class="text-slate-400 shrink-0">{{ $sec->imported_at }}</span>
                     </div>
                     <div class="text-xs font-semibold text-emerald-600 mt-1">
                         {{ $sec->passed_count }} passed student(s) ready
@@ -258,6 +260,38 @@
     </div>
 </div>
 
+{{-- ══════════════════════════════════════════════════════════════════════════════ --}}
+{{-- UPLOAD LOADING OVERLAY                                                         --}}
+{{-- ══════════════════════════════════════════════════════════════════════════════ --}}
+<div id="uploadLoadingOverlay" class="hidden fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 transition-all duration-300">
+    <div class="bg-white rounded-3xl p-8 shadow-2xl w-full max-w-sm border border-slate-100 flex flex-col items-center text-center space-y-5 relative overflow-hidden">
+        {{-- Animated background accent --}}
+        <div class="absolute -top-10 -right-10 w-32 h-32 bg-emerald-100 rounded-full blur-2xl opacity-60"></div>
+        <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-indigo-100 rounded-full blur-2xl opacity-60"></div>
+
+        {{-- Icon / Spinner Container --}}
+        <div class="relative w-20 h-20 flex items-center justify-center">
+            <div class="absolute inset-0 rounded-full border-4 border-emerald-100 animate-ping opacity-75"></div>
+            <div class="absolute inset-0 rounded-full border-4 border-t-emerald-600 border-r-transparent border-b-emerald-600 border-l-transparent animate-spin"></div>
+            <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6 animate-bounce">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+            </div>
+        </div>
+
+        <div class="space-y-1.5 z-10">
+            <h3 class="text-slate-900 font-bold text-lg" id="uploadOverlayTitle">Uploading Grade Sheet...</h3>
+            <p class="text-xs text-slate-500 max-w-xs leading-relaxed" id="uploadOverlaySubtitle">Processing Excel rows and syncing student enrollments with the server. Please wait...</p>
+        </div>
+
+        {{-- Progress Bar indicator --}}
+        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden z-10">
+            <div class="bg-gradient-to-r from-emerald-500 to-teal-500 h-2 rounded-full animate-pulse w-full"></div>
+        </div>
+    </div>
+</div>
+
 @if(session('success'))
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -303,8 +337,28 @@ window.closeSuccessActionModal = function() {
 };
 
 // ── PDF Overlay ────────────────────────────────────────────────────────────────
-window.showPdfLoadingOverlay = function() { document.getElementById('pdfLoadingOverlay').classList.remove('hidden'); };
-window.hidePdfLoadingOverlay = function() { document.getElementById('pdfLoadingOverlay').classList.add('hidden'); };
+window.showPdfLoadingOverlay = function() {
+    const el = document.getElementById('pdfLoadingOverlay');
+    if (el) el.classList.remove('hidden');
+};
+window.hidePdfLoadingOverlay = function() {
+    const el = document.getElementById('pdfLoadingOverlay');
+    if (el) el.classList.add('hidden');
+};
+
+// ── Upload Loading Overlay ──────────────────────────────────────────────────────
+window.showUploadLoadingOverlay = function(title = 'Uploading Grade Sheet...', subtitle = 'Processing Excel rows and syncing student enrollments with the server. Please wait...') {
+    const el = document.getElementById('uploadLoadingOverlay');
+    if (el) {
+        document.getElementById('uploadOverlayTitle').textContent = title;
+        document.getElementById('uploadOverlaySubtitle').textContent = subtitle;
+        el.classList.remove('hidden');
+    }
+};
+window.hideUploadLoadingOverlay = function() {
+    const el = document.getElementById('uploadLoadingOverlay');
+    if (el) el.classList.add('hidden');
+};
 
 // ── XLSX Import ────────────────────────────────────────────────────────────────
 document.getElementById('certXlsxBtn').addEventListener('click', () => {
@@ -314,14 +368,25 @@ document.getElementById('certXlsxBtn').addEventListener('click', () => {
 document.getElementById('certXlsxInput').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
+
+    showUploadLoadingOverlay(`Uploading "${file.name}"...`, 'Parsing Excel rows, matching student records, and saving enrollments. Please wait...');
+
     const reader = new FileReader();
+    reader.onerror = function() {
+        hideUploadLoadingOverlay();
+        alert('Error reading the selected file.');
+    };
     reader.onload = function(ev) {
         try {
             const data  = new Uint8Array(ev.target.result);
             const wb    = XLSX.read(data, { type: 'array' });
             const sheet = wb.Sheets[wb.SheetNames[0]];
             const rows  = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-            if (!rows.length) { alert('The XLSX file appears to be empty.'); return; }
+            if (!rows.length) {
+                hideUploadLoadingOverlay();
+                alert('The XLSX file appears to be empty.');
+                return;
+            }
 
             // Flexible Column Mapping Resolution
             const getColVal = (row, ...keys) => {
@@ -363,12 +428,31 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
             const parsedStudents = [];
 
             rows.forEach(row => {
-                const name = getColVal(row, 'Student Name', 'Name', 'Full Name', 'Student', 'Lastname, Firstname', 'Student_Name', 'STUDENT NAME', 'FULLNAME');
+                let name = getColVal(row, 'Student Name', 'Name', 'Full Name', 'Student', 'Lastname, Firstname', 'Student_Name', 'STUDENT NAME', 'FULLNAME');
                 const grade = getColVal(row, 'Grade', 'Final Grade', 'Final_Grade', 'GWA', 'Score', 'Rating', 'Grades', 'GRADE', 'FINAL GRADE');
                 const sec = getColVal(row, 'Section', 'Section Code', 'Class', 'SECTION');
                 const studentNo = getColVal(row, 'Student No', 'Student Number', 'ID', 'Student_No', 'Student_Number', 'STUDENT NO', 'STUDENT NUMBER');
                 const serialNo = getColVal(row, 'Serial Number', 'Serial No', 'Serial_Number', 'Serial_No', 'SERIAL NUMBER', 'SERIAL NO');
                 const rawRemarks = getColVal(row, 'Remarks', 'Status', 'Remark', 'Remarks/Status', 'REMARKS', 'STATUS', 'REMARK');
+
+                if (!name) {
+                    const surname = getColVal(row, 'Surname', 'Last Name', 'Lastname', 'SURNAME', 'LAST NAME', 'FAMILY NAME');
+                    const firstName = getColVal(row, 'First Name', 'FirstName', 'FIRST NAME', 'Firstname', 'GIVEN NAME');
+                    const extName = getColVal(row, 'Ext Name', 'Extension Name', 'ExtName', 'Extension', 'EXT NAME', 'EXTENSION NAME', 'Suffix', 'EXT');
+                    const middleName = getColVal(row, 'Middle Name', 'MiddleName', 'MIDDLE NAME', 'Middlename', 'MI', 'M.I.');
+
+                    const cleanExt = (extName && extName.toUpperCase() !== 'N/A') ? extName : '';
+                    const cleanMid = (middleName && middleName.toUpperCase() !== 'N/A') ? middleName : '';
+
+                    if (surname || firstName) {
+                        const firstParts = [firstName, cleanMid, cleanExt].filter(Boolean).join(' ');
+                        if (surname && firstParts) {
+                            name = `${surname}, ${firstParts}`;
+                        } else {
+                            name = surname || firstParts;
+                        }
+                    }
+                }
 
                 if (!sectionCode && sec) sectionCode = sec;
                 if (!name) return; // skip headers/empty rows
@@ -385,7 +469,8 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
             });
 
             if (!parsedStudents.length) {
-                alert('No valid students found. Ensure columns like "Name" or "Student Name" exist.');
+                hideUploadLoadingOverlay();
+                alert('No valid students found. Ensure columns like "Name", "Student Name", or separate columns ("Surname", "First Name", "Ext Name", "Middle Name") exist.');
                 return;
             }
 
@@ -393,8 +478,8 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
             if (!sectionCode) {
                 sectionCode = file.name
                     .replace(/\.(xlsx|xls)$/i, '')
-                    .replace(/[_\s]+/g, '-')
-                    .split('-').slice(0, 2).join('-')
+                    .trim()
+                    .replace(/[-_\s]+/g, '-')
                     .toUpperCase() || 'IMPORTED';
             }
 
@@ -417,6 +502,7 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
                 return data;
             })
             .then(res => {
+                hideUploadLoadingOverlay();
                 if (res.success) {
                     const total = res.summary?.total ?? parsedStudents.length;
                     const sectionName = res.summary?.section ?? sectionCode;
@@ -430,10 +516,12 @@ document.getElementById('certXlsxInput').addEventListener('change', function(e) 
                 }
             })
             .catch(err => {
+                hideUploadLoadingOverlay();
                 console.error(err);
                 alert('Error importing file: ' + err.message);
             });
         } catch (e) {
+            hideUploadLoadingOverlay();
             console.error(e);
             alert('Error parsing Excel file: ' + e.message);
         }
@@ -546,7 +634,7 @@ function renderRosterList() {
             <div class="min-w-0 flex-1">
                 <div class="text-sm font-semibold text-slate-800 truncate">${std.name}</div>
                 <div class="flex items-center gap-1.5 mt-0.5">
-                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Student ID:</span>
+                    <span class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Student/Serial ID:</span>
                     <input type="text" value="${std.serial_no || std.student_no || ''}" placeholder="Enter Serial No" 
                         class="student-no-input bg-slate-50 border border-slate-200 rounded px-2 py-0.5 text-[10px] text-slate-700 font-mono font-semibold focus:outline-none focus:border-indigo-400 focus:bg-white w-32 transition" />
                 </div>
@@ -817,7 +905,7 @@ function escapeHtml(str) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    renderCertCardsFromStorage();
+    // Server-rendered section cards from the database are displayed automatically.
 });
 </script>
 @endpush
