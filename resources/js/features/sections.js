@@ -56,32 +56,30 @@ export function attachSectionEvents() {
 
             const sc = btn.dataset.deleteSection;
 
-            if (confirm(`Are you sure you want to delete section ${sc}?`)) {
-
-                if (typeof SECTIONS !== 'undefined') {
-                    const idx = SECTIONS.findIndex(s => s.code === sc);
-
-                    if (idx !== -1) {
-                        SECTIONS.splice(idx, 1);
+            window.showConfirmModal({
+                title: 'Delete Section',
+                message: `Are you sure you want to delete section ${sc}?`,
+                confirmText: 'Delete Section',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    if (typeof SECTIONS !== 'undefined') {
+                        const idx = SECTIONS.findIndex(s => s.code === sc);
+                        if (idx !== -1) {
+                            SECTIONS.splice(idx, 1);
+                        }
+                    }
+                    if (typeof SECTION_STUDENTS !== 'undefined') {
+                        delete SECTION_STUDENTS[sc];
+                    }
+                    if (window.showToast) {
+                        window.showToast(`Section ${sc} deleted.`, 'success', 'Section Deleted');
+                    }
+                    if (typeof render === 'function') {
+                        render();
                     }
                 }
-
-                if (typeof SECTION_STUDENTS !== 'undefined') {
-                    delete SECTION_STUDENTS[sc];
-                }
-
-                if (window.showToast) {
-                    window.showToast(
-                        `Section ${sc} deleted.`,
-                        'success',
-                        'Section Deleted'
-                    );
-                }
-
-                if (typeof render === 'function') {
-                    render();
-                }
-            }
+            });
         });
     });
 
@@ -304,23 +302,20 @@ export function attachSectionEvents() {
                 [];
 
 
-            const originalText =
-                saveNewSectionBtn.innerHTML;
+            if (window.showProgressModal) {
+                window.showProgressModal('Creating Section', `Registering ${code} and syncing roster...`, 30);
+            }
 
-            saveNewSectionBtn.innerHTML =
-                'Creating...';
-
+            const originalText = saveNewSectionBtn.innerHTML;
+            saveNewSectionBtn.innerHTML = 'Creating...';
             saveNewSectionBtn.disabled = true;
-
 
             fetch('/api/sections', {
                 method: 'POST',
-
                 headers: {
                     'Content-Type': 'application/json',
                     'Accept': 'application/json'
                 },
-
                 body: JSON.stringify({
                     code: code,
                     program: program,
@@ -329,94 +324,57 @@ export function attachSectionEvents() {
                     semester: semester,
                     instructor_name: instructor || null,
                     students: importedStudents,
-                    upload_token:
-                        window.modalUploadToken || null
+                    upload_token: window.modalUploadToken || null
                 })
             })
-
             .then(response =>
                 response.json().then(data => ({
                     status: response.status,
                     body: data
                 }))
             )
-
             .then(({ status, body }) => {
-
                 if (status !== 201) {
-                    throw new Error(
-                        body.message ||
-                        'Failed to create section.'
-                    );
+                    throw new Error(body.message || 'Failed to create section.');
                 }
 
-
-                if (window.showToast) {
-
-                    window.showToast(
-                        body.message ||
-                        `Section ${code} created successfully.`,
-                        'success',
-                        'Section Added'
-                    );
-
-                } else {
-
-                    alert(
-                        `Section ${code} created successfully!`
-                    );
-
+                if (window.updateProgressModal) {
+                    window.updateProgressModal(100, 'Section created successfully!');
                 }
 
-
-                const overlay =
-                    document.getElementById(
-                        'newSectionOverlay'
-                    );
-
-                if (overlay) {
-                    overlay.classList.add('hidden');
-                }
-
+                const overlay = document.getElementById('newSectionOverlay');
+                if (overlay) overlay.classList.add('hidden');
 
                 window.modalImportedStudents = null;
                 window.modalUploadToken = null;
-
 
                 if (typeof S !== 'undefined') {
                     S.modalImportedStudents = null;
                     S.showAddSectionModal = false;
                 }
 
-
-                setTimeout(
-                    () => window.location.reload(),
-                    1000
-                );
-
+                if (window.finishProgressModal) {
+                    window.finishProgressModal('Section Created', body.message || `Section ${code} created successfully!`, 'success', () => {
+                        window.location.reload();
+                    });
+                } else {
+                    if (window.showToast) window.showToast(body.message || `Section ${code} created successfully.`, 'success', 'Section Added');
+                    setTimeout(() => window.location.reload(), 800);
+                }
             })
-
             .catch(err => {
-
-                alert(
-                    'Error creating section: ' +
-                    err.message
-                );
-
+                if (window.closeProgressModal) window.closeProgressModal();
+                if (window.showAlertModal) {
+                    window.showAlertModal('Error creating section: ' + err.message, 'Execution Error', 'error');
+                } else {
+                    alert('Error creating section: ' + err.message);
+                }
                 console.error(err);
-
             })
-
             .finally(() => {
-
-                saveNewSectionBtn.innerHTML =
-                    originalText;
-
-                saveNewSectionBtn.disabled =
-                    false;
-
+                saveNewSectionBtn.innerHTML = originalText;
+                saveNewSectionBtn.disabled = false;
             });
-
         });
     }
 
@@ -431,13 +389,27 @@ export function attachSectionEvents() {
 
                 e.stopPropagation();
 
-                if (
-                    !confirm(
-                        'Are you sure you want to remove this student? They will be moved to the Student Archive.'
-                    )
-                ) {
-                    return;
-                }
+                window.showConfirmModal({
+                    title: 'Remove Student',
+                    message: 'Are you sure you want to remove this student? They will be moved to the Student Archive.',
+                    confirmText: 'Remove Student',
+                    cancelText: 'Cancel',
+                    isDanger: true,
+                    onConfirm: () => {
+                        const sno = btn.dataset.deleteStudent;
+                        const sc = btn.dataset.sectionCode;
+
+                        if (
+                            typeof SECTION_STUDENTS !== 'undefined' &&
+                            SECTION_STUDENTS[sc]
+                        ) {
+                            SECTION_STUDENTS[sc] = SECTION_STUDENTS[sc].filter(st => st.student_no !== sno);
+                        }
+                        if (window.finishProgressModal) {
+                            window.finishProgressModal('Student Removed', 'Student moved to Student Archive successfully.', 'success');
+                        }
+                    }
+                });
 
 
                 const sno =

@@ -14,29 +14,12 @@
 
 <x-page-header title="Platoon Management Overview" subtitle="Group active cadets by their platoons, view personnel rosters, and track unassigned personnel.">
     <x-slot name="actions">
-        <button onclick="document.getElementById('newPlatoonOverlay').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition cursor-pointer">
+        <button onclick="openNewPlatoonModal()" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition cursor-pointer">
             <x-icon name="plus" class="w-4 h-4" /> New Platoon
         </button>
     </x-slot>
 </x-page-header>
 
-{{-- ── Session Alerts ── --}}
-@if(session('success'))
-    <div class="p-4 mb-4 text-sm text-emerald-800 rounded-lg bg-emerald-50 border border-emerald-200" role="alert">
-        <span class="font-medium">Success!</span> {{ session('success') }}
-    </div>
-@endif
-
-@if($errors->any())
-    <div class="p-4 mb-4 text-sm text-rose-800 rounded-lg bg-rose-50 border border-rose-200" role="alert">
-        <span class="font-medium">Validation errors:</span>
-        <ul class="mt-1.5 list-disc list-inside">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
 
 {{-- ── Summary Stat Cards ── --}}
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
@@ -230,7 +213,7 @@
                     <div class="text-slate-900 font-bold tracking-tight text-lg">New Platoon</div>
                     <div class="text-xs text-slate-500 mt-0.5">Fill in the details to add a new ROTC platoon</div>
                 </div>
-                <button type="button" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer" onclick="document.getElementById('newPlatoonOverlay').classList.add('hidden')">
+                <button type="button" class="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer" onclick="closeNewPlatoonModal()">
                     <x-icon name="close" class="w-4 h-4" />
                 </button>
             </div>
@@ -251,16 +234,16 @@
                 </div>
                 
                 <div class="border-t border-slate-100 pt-4 space-y-4">
-                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Compare list with Master List (XLSX only)</div>
+                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Compare list with Master List (All Sheet Formats)</div>
                     <div>
                         <div class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                            <span>Class List XLSX</span>
+                            <span>Class List Sheet File</span>
                             <span class="text-rose-500">*</span>
                         </div>
                         <label class="block border-2 border-dashed border-slate-200 hover:border-indigo-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/50 transition cursor-pointer">
                             <x-icon name="upload" class="w-5 h-5 text-slate-400 mx-auto" />
-                            <span id="classFileLabel" class="text-xs text-slate-550 mt-1 block truncate">Upload Class List</span>
-                            <input type="file" id="newPlatClassFile" accept=".xlsx" class="hidden" />
+                            <span id="classFileLabel" class="text-xs text-slate-550 mt-1 block truncate">Upload Class List Sheet</span>
+                            <input type="file" id="newPlatClassFile" accept=".xlsx,.xls,.xlsb,.xlsm,.csv,.ods,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.oasis.opendocument.spreadsheet" class="hidden" />
                         </label>
                     </div>
                     <div id="compareResultContainer" class="hidden text-xs p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800">
@@ -275,7 +258,7 @@
                 </div>
             </div>
             <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50 rounded-b-2xl">
-                <button type="button" class="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer" onclick="document.getElementById('newPlatoonOverlay').classList.add('hidden')">Cancel</button>
+                <button type="button" class="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer" onclick="closeNewPlatoonModal()">Cancel</button>
                 <button type="button" id="platoonFormCreate" class="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
                     <x-icon name="users" class="w-4 h-4" /> Create Platoon
                 </button>
@@ -287,7 +270,7 @@
 <!-- Edit Platoon Modal -->
 <div id="editPlatoonOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form id="editPlatoonForm" method="POST" action="">
+        <form id="editPlatoonForm" method="POST" action="" data-progress-title="Updating Platoon" data-progress-subtitle="Saving modified platoon configuration to database...">
             @csrf
             @method('PUT')
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
@@ -384,6 +367,37 @@ window.openEditPlatoonModal = function(id, code, schoolYear, room, instructor) {
     document.getElementById('editPlatoonOverlay').classList.remove('hidden');
 };
 
+window.resetNewPlatoonForm = function() {
+    const code = document.getElementById('newPlatCode');
+    const sy = document.getElementById('newPlatSchoolYear');
+    const room = document.getElementById('newPlatRoom');
+    const classInput = document.getElementById('newPlatClassFile');
+    const classLabel = document.getElementById('classFileLabel');
+    const container = document.getElementById('compareResultContainer');
+    const label = document.getElementById('compareCountLabel');
+
+    if (code) code.value = '';
+    if (sy) sy.value = '';
+    if (room) room.value = '';
+    if (classInput) classInput.value = '';
+    if (classLabel) classLabel.textContent = 'Upload Class List Sheet';
+    if (container) container.classList.add('hidden');
+    if (label) label.textContent = '0 matched';
+
+    window.modalImportedStudents = null;
+    window.modalUploadToken = null;
+};
+
+window.openNewPlatoonModal = function() {
+    window.resetNewPlatoonForm();
+    document.getElementById('newPlatoonOverlay')?.classList.remove('hidden');
+};
+
+window.closeNewPlatoonModal = function() {
+    window.resetNewPlatoonForm();
+    document.getElementById('newPlatoonOverlay')?.classList.add('hidden');
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     // Left panel Platoon search
     const search = document.getElementById('platoon-search');
@@ -470,6 +484,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (val.includes('email') || val.includes('gmail')) {
                         emailIdx = c;
                     }
+                    if (val.includes('program') || val.includes('course') || val.includes('class')) {
+                        programIdx = c;
+                    }
                 });
                 
                 if (nameIdx === -1 && lastNameIdx === -1) {
@@ -524,6 +541,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const addressVal = addressIdx !== -1 ? (row[addressIdx] || '').toString().trim() : '';
                     const cellVal = cellIdx !== -1 ? (row[cellIdx] || '').toString().trim() : '';
                     const emailVal = emailIdx !== -1 ? (row[emailIdx] || '').toString().trim() : '';
+                    const programVal = programIdx !== -1 ? (row[programIdx] || '').toString().trim() : '';
 
                     list.push({
                         name: nameStr,
@@ -534,14 +552,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         address: addressVal,
                         cellNo: cellVal,
                         email: emailVal,
-                        program: 'ROTC'
+                        program: programVal
                     });
                 });
                 
                 callback(list);
             } catch (err) {
                 console.error(err);
-                alert('Error parsing Excel file. Please upload a valid Class List XLSX file.');
+                alert('Error parsing spreadsheet file. Please upload a valid Class List sheet file.');
             }
         };
         reader.readAsArrayBuffer(file);
@@ -605,8 +623,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const room = document.getElementById('newPlatRoom')?.value.trim() || 'TBA';
 
         if (!code) {
-            alert('Platoon Name is required');
+            if (window.showAlertModal) window.showAlertModal('Platoon Name is required', 'Validation Error', 'warning');
+            else alert('Platoon Name is required');
             return;
+        }
+
+        if (window.showProgressModal) {
+            window.showProgressModal('Creating ROTC Platoon', `Registering platoon ${code} and assigning cadets...`, 30);
         }
 
         const importedStudents = window.modalImportedStudents || [];
@@ -637,13 +660,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(body.message || 'Failed to create platoon.');
             }
 
-            alert(`Platoon ${code} created successfully!`);
             document.getElementById('newPlatoonOverlay').classList.add('hidden');
             window.modalImportedStudents = null;
-            setTimeout(() => window.location.reload(), 1000);
+
+            if (window.finishProgressModal) {
+                window.finishProgressModal('Platoon Created', `Platoon ${code} created successfully!`, 'success', () => window.location.reload());
+            } else {
+                alert(`Platoon ${code} created successfully!`);
+                setTimeout(() => window.location.reload(), 800);
+            }
         })
         .catch(err => {
-            alert('Error creating platoon: ' + err.message);
+            if (window.closeProgressModal) window.closeProgressModal();
+            if (window.showAlertModal) {
+                window.showAlertModal('Error creating platoon: ' + err.message, 'Execution Error', 'error');
+            } else {
+                alert('Error creating platoon: ' + err.message);
+            }
             console.error(err);
         })
         .finally(() => {

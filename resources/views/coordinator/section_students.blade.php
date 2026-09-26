@@ -6,35 +6,17 @@
 
 <x-page-header title="Students in Section: {{ $section->section_name }}" subtitle="Manage and view enrolled students for this class section">
     <x-slot name="actions">
-        <a href="{{ route('coordinator.sections') }}" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition shadow-sm font-semibold">
-            <x-icon name="chevron" class="w-4 h-4 rotate-90" /> Back to Sections
-        </a>
+        <div class="flex items-center gap-3">
+            <button type="button" onclick="openDeleteSectionModal('{{ $section->id }}', '{{ addslashes($section->section_name) }}')" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition shadow-xs font-semibold cursor-pointer">
+                <x-icon name="trash" class="w-4 h-4" /> Delete Section
+            </button>
+            <a href="{{ route('coordinator.sections') }}" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition shadow-sm font-semibold">
+                <x-icon name="chevron" class="w-4 h-4 rotate-90" /> Back to Sections
+            </a>
+        </div>
     </x-slot>
 </x-page-header>
 
-@if(session('success'))
-<div class="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Success!</div>
-        <div>{{ session('success') }}</div>
-    </div>
-</div>
-@endif
-
-@if($errors->any())
-<div class="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="alertc" class="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Error submitting form:</div>
-        <ul class="list-disc list-inside mt-1 space-y-0.5">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-</div>
-@endif
 
 <div class="mt-6">
     <x-card title="Enrolled Students ({{ $students->total() }})">
@@ -121,7 +103,7 @@
 <!-- Edit Student Modal -->
 <div id="editStudentOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form id="editStudentForm" method="POST" action="">
+        <form id="editStudentForm" method="POST" action="" data-progress-title="Updating Student Record" data-progress-subtitle="Saving changes to student profile and status...">
             @csrf
             @method('PUT')
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
@@ -209,7 +191,7 @@
 <!-- Delete Student Confirmation Modal -->
 <div id="deleteStudentOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteStudentModalContainer">
-        <form id="deleteStudentForm" method="POST" action="">
+        <form id="deleteStudentForm" method="POST" action="" data-progress-title="Deleting Student Record" data-progress-subtitle="Removing student from section roster...">
             @csrf
             @method('DELETE')
             <div class="p-6 text-center">
@@ -233,8 +215,57 @@
     </div>
 </div>
 
+<!-- Delete Section Confirmation Modal -->
+<div id="deleteSectionOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteSectionModalContainer">
+        <form id="deleteSectionForm" method="POST" action="" data-progress-title="Deleting Section" data-progress-subtitle="Removing section and unlinking enrolled students...">
+            @csrf
+            @method('DELETE')
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <x-icon name="trash" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">Delete Section</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    Are you sure you want to delete section <span id="deleteSectionCode" class="font-bold text-slate-800">{{ $section->section_name }}</span>? This will permanently remove the section record.
+                </p>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                    <button type="button" onclick="closeDeleteSectionModal()" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-sm hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                        Delete Section
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 @push('scripts')
     <script>
+        window.openDeleteSectionModal = function(id, code) {
+            const overlay = document.getElementById('deleteSectionOverlay');
+            const form = document.getElementById('deleteSectionForm');
+            const codeSpan = document.getElementById('deleteSectionCode');
+
+            if (!overlay || !form || !codeSpan) return;
+
+            form.action = "{{ route('coordinator.sections.delete', ':id') }}".replace(':id', id);
+            codeSpan.textContent = code;
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        };
+
+        window.closeDeleteSectionModal = function() {
+            const overlay = document.getElementById('deleteSectionOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        };
+
         window.openDeleteStudentModal = function(db_id, name, student_id) {
             const overlay = document.getElementById('deleteStudentOverlay');
             const form = document.getElementById('deleteStudentForm');

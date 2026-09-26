@@ -1708,264 +1708,101 @@ class SectionController extends Controller
      * Juan Dela Cruz
      */
     private function studentNameMatches(
-    Student $student,
-    string $uploadedName
-): bool {
+        Student $student,
+        string $uploadedName
+    ): bool {
+        $uploadedName = trim($uploadedName);
 
-    $uploadedName = trim($uploadedName);
-
-    if ($uploadedName === '') {
-        return false;
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Normalize helper
-    |--------------------------------------------------------------------------
-    */
-
-    $normalize = function (?string $value): string {
-
-        if (!$value) {
-            return '';
+        if ($uploadedName === '') {
+            return false;
         }
 
-        $value = mb_strtolower(
-            trim($value),
-            'UTF-8'
-        );
+        $cleanName = function (?string $value): string {
+            if (!$value) {
+                return '';
+            }
 
-        /*
-        | Convert punctuation to spaces
-        */
+            $value = mb_strtolower(trim($value), 'UTF-8');
+            $value = preg_replace('/\b(jr|sr|iii|iv|ii|v|esq)\b\.?/u', '', $value);
+            $value = str_replace([',', '.', '-', '_'], ' ', $value);
+            return trim(preg_replace('/\s+/u', ' ', $value));
+        };
 
-        $value = str_replace(
-            [
-                ',',
-                '.',
-                '-',
-                '_',
-            ],
-            ' ',
-            $value
-        );
+        $compact = function (?string $value) use ($cleanName): string {
+            return preg_replace('/[^a-z0-9ñ]/u', '', $cleanName($value));
+        };
 
-        /*
-        | Remove duplicate spaces
-        */
+        $dbLastName = $compact($student->last_name);
+        $dbFirstName = $compact($student->first_name);
 
-        $value = preg_replace(
-            '/\s+/u',
-            ' ',
-            $value
-        );
+        if (!$dbLastName || !$dbFirstName) {
+            return false;
+        }
 
-        return trim($value);
-    };
+        $uploadedClean = $cleanName($uploadedName);
+        $uploadedCompact = $compact($uploadedName);
 
+        // 1. Direct full name compact match (ignoring suffixes/middle spaces)
+        $fullDbCompact = $compact(($student->last_name ?? '') . ' ' . ($student->first_name ?? ''));
+        $fullDbCompactAlt = $compact(($student->first_name ?? '') . ' ' . ($student->last_name ?? ''));
 
-    /*
-    |--------------------------------------------------------------------------
-    | Normalize compact version
-    |--------------------------------------------------------------------------
-    */
-
-    $compact = function (?string $value) use ($normalize): string {
-
-        return preg_replace(
-            '/[^a-z0-9ñ]/u',
-            '',
-            $normalize($value)
-        );
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Database values
-    |--------------------------------------------------------------------------
-    */
-
-    $dbLastName =
-        $compact(
-            $student->last_name
-        );
-
-    $dbFirstName =
-        $compact(
-            $student->first_name
-        );
-
-
-    if (
-        !$dbLastName ||
-        !$dbFirstName
-    ) {
-
-        return false;
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | EXCEL FORMAT
-    |
-    | LAST NAME, FIRST NAME MIDDLE NAME
-    |
-    | Example:
-    |
-    | YAMID, KENNETH JAMES GENOBIAG
-    |
-    | We extract:
-    |
-    | Last Name  = YAMID
-    | First Name = KENNETH
-    |
-    | Middle Name is ignored because
-    | students table has no middle_name column.
-    |--------------------------------------------------------------------------
-    */
-
-    if (
-        str_contains(
-            $uploadedName,
-            ','
-        )
-    ) {
-
-        $parts =
-            explode(
-                ',',
-                $uploadedName,
-                2
-            );
-
-
-        $uploadedLastName =
-            $compact(
-                trim(
-                    $parts[0] ?? ''
-                )
-            );
-
-
-        $firstNamePart =
-            trim(
-                $parts[1] ?? ''
-            );
-
-
-        /*
-        |--------------------------------------------------------------------------
-        | Get first word after comma
-        |
-        | KENNETH JAMES GENOBIAG
-        |
-        | becomes:
-        |
-        | KENNETH
-        |--------------------------------------------------------------------------
-        */
-
-        $firstNameWords =
-            preg_split(
-                '/\s+/u',
-                $firstNamePart
-            );
-
-
-        $firstWordUploaded =
-            $compact(
-                $firstNameWords[0] ?? ''
-            );
-
-        $fullUploadedFirstName =
-            $compact(
-                $firstNamePart
-            );
-
-
-        $lastNameMatch = (
-            $uploadedLastName === $dbLastName
-        );
-
-        $firstNameMatch = (
-            $firstWordUploaded === $dbFirstName
-            ||
-            $fullUploadedFirstName === $dbFirstName
-            ||
-            (strlen($firstWordUploaded) >= 2 && str_contains($dbFirstName, $firstWordUploaded))
-            ||
-            (strlen($dbFirstName) >= 2 && str_contains($fullUploadedFirstName, $dbFirstName))
-        );
-
-        if ($lastNameMatch && $firstNameMatch) {
+        if ($uploadedCompact === $fullDbCompact || $uploadedCompact === $fullDbCompactAlt) {
             return true;
         }
-    }
 
+        // 2. Comma format: "Dela Cruz, Juan Carlos"
+        if (str_contains($uploadedName, ',')) {
+            $parts = explode(',', $uploadedName, 2);
+            $uploadedLastName = $compact(trim($parts[0] ?? ''));
+            $firstNamePart = trim($parts[1] ?? '');
 
-    /*
-    |--------------------------------------------------------------------------
-    | FALLBACK FORMAT
-    |
-    | If Excel does not use:
-    |
-    | LAST NAME, FIRST NAME
-    |
-    | Try:
-    |
-    | FIRST NAME LAST NAME
-    |
-    |--------------------------------------------------------------------------
-    */
+            $firstNameWords = preg_split('/\s+/u', $cleanName($firstNamePart));
+            $firstWordUploaded = $compact($firstNameWords[0] ?? '');
+            $fullUploadedFirstName = $compact($firstNamePart);
 
-    $words =
-        preg_split(
-            '/\s+/u',
-            trim($uploadedName)
-        );
+            $lastNameMatch = ($uploadedLastName === $dbLastName || str_contains($dbLastName, $uploadedLastName) || str_contains($uploadedLastName, $dbLastName));
+            $firstNameMatch = (
+                $firstWordUploaded === $dbFirstName
+                || $fullUploadedFirstName === $dbFirstName
+                || (strlen($firstWordUploaded) >= 2 && str_contains($dbFirstName, $firstWordUploaded))
+                || (strlen($dbFirstName) >= 2 && str_contains($fullUploadedFirstName, $dbFirstName))
+                || (strlen($firstWordUploaded) >= 2 && str_contains($firstWordUploaded, $dbFirstName))
+            );
 
+            if ($lastNameMatch && $firstNameMatch) {
+                return true;
+            }
+        }
 
-    if (
-        count($words) < 2
-    ) {
+        // 3. First Last format: "Juan Carlos Dela Cruz Jr."
+        $words = array_values(array_filter(explode(' ', $uploadedClean)));
+        if (count($words) >= 2) {
+            $upLastWord = $compact(end($words));
+            $upFirstWord = $compact($words[0]);
+
+            $lastNameMatch = ($upLastWord === $dbLastName || str_contains($dbLastName, $upLastWord) || str_contains($upLastWord, $dbLastName));
+            $firstNameMatch = (
+                $upFirstWord === $dbFirstName
+                || (strlen($upFirstWord) >= 2 && str_contains($dbFirstName, $upFirstWord))
+                || (strlen($dbFirstName) >= 2 && str_contains($upFirstWord, $dbFirstName))
+            );
+
+            if ($lastNameMatch && $firstNameMatch) {
+                return true;
+            }
+
+            // Also check multi-word last name (e.g., "Dela Cruz")
+            if (count($words) >= 3) {
+                $upMultiLast = $compact($words[count($words) - 2] . ' ' . $words[count($words) - 1]);
+                $lastMatchMulti = ($upMultiLast === $dbLastName || str_contains($dbLastName, $upMultiLast) || str_contains($upMultiLast, $dbLastName));
+                if ($lastMatchMulti && $firstNameMatch) {
+                    return true;
+                }
+            }
+        }
+
         return false;
     }
-
-
-    $uploadedFirstName =
-        $compact(
-            $words[0]
-        );
-
-
-    $uploadedLastName =
-        $compact(
-            $words[
-                count($words) - 1
-            ]
-        );
-
-
-    $fullUploadedCompact = $compact($uploadedName);
-    $fullDbCompact = $compact(($student->last_name ?? '') . ' ' . ($student->first_name ?? ''));
-    $fullDbCompactAlt = $compact(($student->first_name ?? '') . ' ' . ($student->last_name ?? ''));
-
-    if ($fullUploadedCompact === $fullDbCompact || $fullUploadedCompact === $fullDbCompactAlt) {
-        return true;
-    }
-
-    return (
-        $uploadedLastName === $dbLastName
-        &&
-        (
-            $uploadedFirstName === $dbFirstName
-            ||
-            (strlen($uploadedFirstName) >= 2 && str_contains($dbFirstName, $uploadedFirstName))
-        )
-    );
-}
 
 
     /**

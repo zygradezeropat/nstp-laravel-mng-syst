@@ -605,7 +605,13 @@ class StudentController extends Controller
                 [
                     'xlsx',
                     'xls',
-                    'csv'
+                    'csv',
+                    'ods',
+                    'tsv',
+                    'xlsb',
+                    'xlsm',
+                    'txt',
+                    'xml'
                 ],
                 true
             )
@@ -617,7 +623,7 @@ class StudentController extends Controller
                     false,
 
                 'message' =>
-                    'Invalid file format. Only XLSX, XLS, and CSV files are accepted.',
+                    'Invalid file format. Please upload a valid spreadsheet file (XLSX, XLS, CSV, ODS, TSV, XLSB, XLSM).',
 
             ], 422);
         }

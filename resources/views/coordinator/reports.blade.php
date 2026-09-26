@@ -12,7 +12,7 @@
     <!-- Left Column: Filter and Report Generator Form -->
     <div class="lg:col-span-1 space-y-6">
         <x-card title="Generate Official Reports" subtitle="Export data for university submission">
-            <form id="reportFilterForm" action="{{ route('coordinator.reports') }}" method="GET" class="p-4 space-y-4">
+            <form id="reportFilterForm" action="{{ route('coordinator.reports') }}" method="GET" class="p-4 space-y-4" data-progress-title="Filtering Report Data" data-progress-subtitle="Applying selected filters and recalculating summary statistics...">
                 <div class="space-y-1">
                     <label class="text-xs font-semibold text-slate-600">Report Type</label>
                     <select name="report_type" id="filterReportType" onchange="this.form.submit()" class="w-full px-3 py-2 text-sm rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-300 shadow-sm bg-white font-medium">
@@ -66,6 +66,14 @@
                     </select>
                 </div>
 
+                <!-- Hidden Signatory Fields for PDF Export -->
+                <input type="hidden" name="received_by" id="inputReceivedBy" value="FELICIDAD L. FORRO" />
+                <input type="hidden" name="received_by_title" id="inputReceivedByTitle" value="Registrar III" />
+                <input type="hidden" name="submitted_by" id="inputSubmittedBy" value="DODONGAN, EUGINE B. / DR. EMIL F. BRIONES" />
+                <input type="hidden" name="submitted_by_title" id="inputSubmittedByTitle" value="Professor / NSTP Coordinator" />
+                <input type="hidden" name="received_sig" id="inputReceivedSig" value="" />
+                <input type="hidden" name="submitted_sig" id="inputSubmittedSig" value="" />
+
                 <div class="pt-2 flex flex-col gap-2">
                     <button type="submit" class="w-full px-4 py-2 text-sm font-semibold rounded-lg bg-slate-800 text-white hover:bg-slate-900 transition shadow-sm cursor-pointer flex items-center justify-center gap-2">
                         <x-icon name="search" class="w-4 h-4" /> Filter & Preview
@@ -80,36 +88,6 @@
                     </div>
                 </div>
             </form>
-        </x-card>
-
-        <!-- OCR Upload Card -->
-        <x-card title="OCR Processing" subtitle="Extract text from physical registration forms">
-            <div class="p-6 text-center border-2 border-dashed border-slate-200 rounded-xl m-4 bg-slate-50 hover:bg-slate-100 transition cursor-pointer">
-                <div class="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mx-auto mb-3">
-                    <x-icon name="upload" class="w-6 h-6" />
-                </div>
-                <h4 class="text-sm font-bold text-slate-800">Upload Scanned Documents</h4>
-                <p class="text-xs text-slate-500 mt-1 mb-4">Supported formats: JPG, PNG, PDF</p>
-                <button class="px-4 py-2 text-sm font-semibold rounded-lg border border-indigo-200 text-indigo-700 hover:bg-indigo-50 transition shadow-sm">
-                    Select Files
-                </button>
-            </div>
-            
-            <div class="px-4 pb-4">
-                <div class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Recent OCR Tasks</div>
-                <ul class="space-y-2">
-                    <li class="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-white">
-                        <div class="flex items-center gap-3">
-                            <x-icon name="filetext" class="w-5 h-5 text-indigo-500" />
-                            <div>
-                                <div class="text-sm font-medium text-slate-800">batch_registrations_01.pdf</div>
-                                <div class="text-[10px] text-slate-500">Processed today at 10:45 AM</div>
-                            </div>
-                        </div>
-                        <span class="text-xs font-semibold px-2 py-1 rounded bg-emerald-50 text-emerald-600">Completed</span>
-                    </li>
-                </ul>
-            </div>
         </x-card>
     </div>
 
@@ -538,47 +516,405 @@
     </div>
 </div>
 
+<!-- Edit PDF Signatories & E-Signatures Modal -->
+<div id="pdfSignatoriesOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-xl mx-4 overflow-hidden transform transition-all duration-200" id="pdfSignatoriesModalContainer">
+        <!-- Modal Header -->
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                    <x-icon name="pencil" class="w-4 h-4" />
+                </div>
+                <div>
+                    <h3 class="text-base font-bold text-slate-800">PDF Report Signatories & E-Signatures</h3>
+                    <p class="text-xs text-slate-500">Configure names, official titles, and digital signatures for PDF reports</p>
+                </div>
+            </div>
+            <button type="button" onclick="closePdfSignatoriesModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+                <x-icon name="close" class="w-4 h-4" />
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-6 space-y-5 text-sm max-h-[75vh] overflow-y-auto">
+            <!-- Received By Section -->
+            <div class="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-3">
+                <div class="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center justify-between">
+                    <span class="flex items-center gap-1.5"><x-icon name="user" class="w-3.5 h-3.5" /> "Received by" Signatory (Left Box)</span>
+                    <button type="button" onclick="clearSignature('received')" class="text-[10px] font-semibold text-rose-600 hover:text-rose-700 hover:underline">Clear E-Sig</button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-slate-600 block mb-1">Full Name</label>
+                        <input type="text" id="modalReceivedBy" value="FELICIDAD L. FORRO" oninput="updateSignatoryPreview()" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-300 bg-white font-semibold" placeholder="e.g. FELICIDAD L. FORRO" />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-slate-600 block mb-1">Designation / Title</label>
+                        <input type="text" id="modalReceivedByTitle" value="Registrar III" oninput="updateSignatoryPreview()" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-300 bg-white" placeholder="e.g. Registrar III" />
+                    </div>
+                </div>
+
+                <!-- E-Signature Options for Received By -->
+                <div class="pt-1">
+                    <label class="text-xs font-semibold text-slate-600 block mb-1">E-Signature (Draw or Upload Image)</label>
+                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                        <div class="relative bg-white border border-slate-200 rounded-lg p-1">
+                            <canvas id="canvasReceivedSig" width="220" height="55" class="bg-white rounded cursor-crosshair touch-none border border-dashed border-slate-200 block" title="Draw signature here"></canvas>
+                            <span class="text-[9px] text-slate-400 absolute bottom-1 right-2 pointer-events-none">Draw Here ✍️</span>
+                        </div>
+                        <div class="flex flex-col gap-1.5 w-full sm:w-auto">
+                            <input type="file" id="modalReceivedSigFile" accept=".png,.jpg,.jpeg" class="hidden" />
+                            <button type="button" onclick="document.getElementById('modalReceivedSigFile').click()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition cursor-pointer flex items-center justify-center gap-1.5">
+                                <x-icon name="upload" class="w-3.5 h-3.5" /> Upload Image
+                            </button>
+                            <span class="text-[10px] text-slate-400 text-center sm:text-left">PNG / JPG file</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submitted By Section -->
+            <div class="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-3">
+                <div class="text-xs font-bold text-indigo-700 uppercase tracking-wider flex items-center justify-between">
+                    <span class="flex items-center gap-1.5"><x-icon name="user" class="w-3.5 h-3.5" /> "Submitted by" Signatory (Right Box)</span>
+                    <button type="button" onclick="clearSignature('submitted')" class="text-[10px] font-semibold text-rose-600 hover:text-rose-700 hover:underline">Clear E-Sig</button>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-semibold text-slate-600 block mb-1">Full Name</label>
+                        <input type="text" id="modalSubmittedBy" value="DODONGAN, EUGINE B. / DR. EMIL F. BRIONES" oninput="updateSignatoryPreview()" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-300 bg-white font-semibold" placeholder="e.g. DR. EMIL F. BRIONES" />
+                    </div>
+                    <div>
+                        <label class="text-xs font-semibold text-slate-600 block mb-1">Designation / Title</label>
+                        <input type="text" id="modalSubmittedByTitle" value="Professor / NSTP Coordinator" oninput="updateSignatoryPreview()" class="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 focus:outline-none focus:border-indigo-300 bg-white" placeholder="e.g. NSTP Coordinator" />
+                    </div>
+                </div>
+
+                <!-- E-Signature Options for Submitted By -->
+                <div class="pt-1">
+                    <label class="text-xs font-semibold text-slate-600 block mb-1">E-Signature (Draw or Upload Image)</label>
+                    <div class="flex flex-col sm:flex-row items-center gap-3">
+                        <div class="relative bg-white border border-slate-200 rounded-lg p-1">
+                            <canvas id="canvasSubmittedSig" width="220" height="55" class="bg-white rounded cursor-crosshair touch-none border border-dashed border-slate-200 block" title="Draw signature here"></canvas>
+                            <span class="text-[9px] text-slate-400 absolute bottom-1 right-2 pointer-events-none">Draw Here ✍️</span>
+                        </div>
+                        <div class="flex flex-col gap-1.5 w-full sm:w-auto">
+                            <input type="file" id="modalSubmittedSigFile" accept=".png,.jpg,.jpeg" class="hidden" />
+                            <button type="button" onclick="document.getElementById('modalSubmittedSigFile').click()" class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 transition cursor-pointer flex items-center justify-center gap-1.5">
+                                <x-icon name="upload" class="w-3.5 h-3.5" /> Upload Image
+                            </button>
+                            <span class="text-[10px] text-slate-400 text-center sm:text-left">PNG / JPG file</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Signature Live Preview Card -->
+            <div class="p-4 rounded-xl border border-dashed border-slate-300 bg-white">
+                <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center mb-3">Live Signature Footer Preview</div>
+                <div class="grid grid-cols-2 gap-6 text-center text-xs">
+                    <div class="flex flex-col justify-end">
+                        <div class="text-[10px] text-slate-400 text-left mb-1">Received by:</div>
+                        <div class="h-10 flex items-center justify-center mb-0.5">
+                            <img id="prevReceivedSigImg" class="max-h-10 max-w-[130px] hidden object-contain" />
+                        </div>
+                        <div id="prevReceivedBy" class="font-bold text-slate-800 uppercase border-t border-slate-800 pt-1 text-[11px] truncate">FELICIDAD L. FORRO</div>
+                        <div id="prevReceivedByTitle" class="text-[10px] text-slate-500 truncate">Registrar III</div>
+                    </div>
+                    <div class="flex flex-col justify-end">
+                        <div class="text-[10px] text-slate-400 text-left mb-1">Submitted by:</div>
+                        <div class="h-10 flex items-center justify-center mb-0.5">
+                            <img id="prevSubmittedSigImg" class="max-h-10 max-w-[130px] hidden object-contain" />
+                        </div>
+                        <div id="prevSubmittedBy" class="font-bold text-slate-800 uppercase border-t border-slate-800 pt-1 text-[11px] truncate">DODONGAN, EUGINE B. / DR. EMIL F. BRIONES</div>
+                        <div id="prevSubmittedByTitle" class="text-[10px] text-slate-500 truncate">Professor / NSTP Coordinator</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div class="px-6 py-3.5 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+            <button type="button" onclick="resetPdfSignatories()" class="px-3.5 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 transition cursor-pointer">
+                Reset Defaults
+            </button>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="closePdfSignatoriesModal()" class="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" onclick="saveSignatoriesAndExportPdf()" class="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-bold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
+                    <x-icon name="download" class="w-3.5 h-3.5" /> Export PDF Document
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
 <script>
-    function filterReportTable() {
-        const query = document.getElementById('tableSearch').value.toLowerCase();
-        const rows = document.querySelectorAll('.report-row');
+    window.receivedSigData = null;
+    window.submittedSigData = null;
 
-        rows.forEach(row => {
-            const text = row.innerText.toLowerCase();
-            if (text.includes(query)) {
-                row.style.display = '';
-            } else {
-                row.style.display = 'none';
+    function initSignatureCanvas(canvasId, storageKey) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+
+        function getPos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: (clientX - rect.left) * (canvas.width / rect.width),
+                y: (clientY - rect.top) * (canvas.height / rect.height)
+            };
+        }
+
+        function startDraw(e) {
+            drawing = true;
+            const pos = getPos(e);
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.strokeStyle = '#0f172a';
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        }
+
+        function draw(e) {
+            if (!drawing) return;
+            e.preventDefault();
+            const pos = getPos(e);
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+            window[storageKey] = canvas.toDataURL('image/png');
+            updateSignatoryPreview();
+        }
+
+        function stopDraw() {
+            if (drawing) {
+                drawing = false;
+                window[storageKey] = canvas.toDataURL('image/png');
+                updateSignatoryPreview();
             }
+        }
+
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDraw);
+        canvas.addEventListener('mouseleave', stopDraw);
+
+        canvas.addEventListener('touchstart', startDraw, { passive: false });
+        canvas.addEventListener('touchmove', draw, { passive: false });
+        canvas.addEventListener('touchend', stopDraw);
+    }
+
+    function initSigFileUpload(fileInputId, storageKey) {
+        const input = document.getElementById(fileInputId);
+        if (!input) return;
+        input.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                window[storageKey] = evt.target.result;
+                updateSignatoryPreview();
+            };
+            reader.readAsDataURL(file);
         });
     }
 
+    document.addEventListener('DOMContentLoaded', () => {
+        initSignatureCanvas('canvasReceivedSig', 'receivedSigData');
+        initSignatureCanvas('canvasSubmittedSig', 'submittedSigData');
+        initSigFileUpload('modalReceivedSigFile', 'receivedSigData');
+        initSigFileUpload('modalSubmittedSigFile', 'submittedSigData');
+    });
+
+    window.openPdfSignatoriesModal = function() {
+        const overlay = document.getElementById('pdfSignatoriesOverlay');
+        if (overlay) {
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+            updateSignatoryPreview();
+        }
+    };
+
+    window.closePdfSignatoriesModal = function() {
+        const overlay = document.getElementById('pdfSignatoriesOverlay');
+        if (overlay) {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('flex');
+        }
+        syncInputsToHidden();
+    };
+
+    window.clearSignature = function(type) {
+        if (type === 'received') {
+            window.receivedSigData = null;
+            const canvas = document.getElementById('canvasReceivedSig');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            if (document.getElementById('modalReceivedSigFile')) {
+                document.getElementById('modalReceivedSigFile').value = '';
+            }
+        } else {
+            window.submittedSigData = null;
+            const canvas = document.getElementById('canvasSubmittedSig');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+            if (document.getElementById('modalSubmittedSigFile')) {
+                document.getElementById('modalSubmittedSigFile').value = '';
+            }
+        }
+        updateSignatoryPreview();
+    };
+
+    function syncInputsToHidden() {
+        const rName = document.getElementById('modalReceivedBy')?.value || 'FELICIDAD L. FORRO';
+        const rTitle = document.getElementById('modalReceivedByTitle')?.value || 'Registrar III';
+        const sName = document.getElementById('modalSubmittedBy')?.value || 'DODONGAN, EUGINE B. / DR. EMIL F. BRIONES';
+        const sTitle = document.getElementById('modalSubmittedByTitle')?.value || 'Professor / NSTP Coordinator';
+
+        if (document.getElementById('inputReceivedBy')) document.getElementById('inputReceivedBy').value = rName;
+        if (document.getElementById('inputReceivedByTitle')) document.getElementById('inputReceivedByTitle').value = rTitle;
+        if (document.getElementById('inputSubmittedBy')) document.getElementById('inputSubmittedBy').value = sName;
+        if (document.getElementById('inputSubmittedByTitle')) document.getElementById('inputSubmittedByTitle').value = sTitle;
+
+        if (document.getElementById('inputReceivedSig')) document.getElementById('inputReceivedSig').value = window.receivedSigData || '';
+        if (document.getElementById('inputSubmittedSig')) document.getElementById('inputSubmittedSig').value = window.submittedSigData || '';
+    }
+
+    window.updateSignatoryPreview = function() {
+        const rName = document.getElementById('modalReceivedBy')?.value || 'FELICIDAD L. FORRO';
+        const rTitle = document.getElementById('modalReceivedByTitle')?.value || 'Registrar III';
+        const sName = document.getElementById('modalSubmittedBy')?.value || 'DODONGAN, EUGINE B. / DR. EMIL F. BRIONES';
+        const sTitle = document.getElementById('modalSubmittedByTitle')?.value || 'Professor / NSTP Coordinator';
+
+        if (document.getElementById('prevReceivedBy')) document.getElementById('prevReceivedBy').textContent = rName.toUpperCase();
+        if (document.getElementById('prevReceivedByTitle')) document.getElementById('prevReceivedByTitle').textContent = rTitle;
+        if (document.getElementById('prevSubmittedBy')) document.getElementById('prevSubmittedBy').textContent = sName.toUpperCase();
+        if (document.getElementById('prevSubmittedByTitle')) document.getElementById('prevSubmittedByTitle').textContent = sTitle;
+
+        const prevRImg = document.getElementById('prevReceivedSigImg');
+        if (prevRImg) {
+            if (window.receivedSigData) {
+                prevRImg.src = window.receivedSigData;
+                prevRImg.classList.remove('hidden');
+            } else {
+                prevRImg.classList.add('hidden');
+            }
+        }
+
+        const prevSImg = document.getElementById('prevSubmittedSigImg');
+        if (prevSImg) {
+            if (window.submittedSigData) {
+                prevSImg.src = window.submittedSigData;
+                prevSImg.classList.remove('hidden');
+            } else {
+                prevSImg.classList.add('hidden');
+            }
+        }
+
+        syncInputsToHidden();
+    };
+
+    window.resetPdfSignatories = function() {
+        if (document.getElementById('modalReceivedBy')) document.getElementById('modalReceivedBy').value = 'FELICIDAD L. FORRO';
+        if (document.getElementById('modalReceivedByTitle')) document.getElementById('modalReceivedByTitle').value = 'Registrar III';
+        if (document.getElementById('modalSubmittedBy')) document.getElementById('modalSubmittedBy').value = 'DODONGAN, EUGINE B. / DR. EMIL F. BRIONES';
+        if (document.getElementById('modalSubmittedByTitle')) document.getElementById('modalSubmittedByTitle').value = 'Professor / NSTP Coordinator';
+        clearSignature('received');
+        clearSignature('submitted');
+        updateSignatoryPreview();
+    };
+
     function exportPdfReport() {
-        const form = document.getElementById('reportFilterForm');
-        const params = new URLSearchParams(new FormData(form)).toString();
-        window.location.href = "{{ route('coordinator.reports.export_pdf') }}?" + params;
+        openPdfSignatoriesModal();
+    }
+
+    window.saveSignatoriesAndExportPdf = function() {
+        closePdfSignatoriesModal();
+        triggerActualPdfDownload();
+    };
+
+    function triggerActualPdfDownload() {
+        syncInputsToHidden();
+
+        if (window.showProgressModal) {
+            window.showProgressModal('Exporting PDF Report', 'Building official document format and embedding e-signatures...', 30);
+        }
+        setTimeout(() => {
+            if (window.updateProgressModal) window.updateProgressModal(80, 'Downloading PDF file...');
+        }, 600);
+
+        setTimeout(() => {
+            // Create hidden form to post base64 signatures safely without GET URL limits
+            const postForm = document.createElement('form');
+            postForm.method = 'POST';
+            postForm.action = "{{ route('coordinator.reports.export_pdf') }}";
+            postForm.target = '_blank';
+
+            const csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = '_token';
+            csrfInput.value = "{{ csrf_token() }}";
+            postForm.appendChild(csrfInput);
+
+            const filterForm = document.getElementById('reportFilterForm');
+            const formData = new FormData(filterForm);
+
+            for (let [key, val] of formData.entries()) {
+                const hidden = document.createElement('input');
+                hidden.type = 'hidden';
+                hidden.name = key;
+                hidden.value = val;
+                postForm.appendChild(hidden);
+            }
+
+            document.body.appendChild(postForm);
+            postForm.submit();
+            document.body.removeChild(postForm);
+
+            if (window.finishProgressModal) {
+                window.finishProgressModal('PDF Export Started', 'Your official PDF report is being compiled and downloaded.', 'success');
+            }
+        }, 1000);
     }
 
     function exportCsvReport() {
-        const rows = document.querySelectorAll('.report-row');
-        let csvContent = "data:text/csv;charset=utf-8,Student ID,Full Name,Course,Program,Section,Grade,Status\n";
+        if (window.showProgressModal) {
+            window.showProgressModal('Exporting CSV Data', 'Extracting table records and converting to CSV...', 40);
+        }
+        setTimeout(() => {
+            const rows = document.querySelectorAll('.report-row');
+            let csvContent = "data:text/csv;charset=utf-8,Student ID,Full Name,Course,Program,Section,Grade,Status\n";
 
-        rows.forEach(row => {
-            if (row.style.display !== 'none') {
-                const cols = row.querySelectorAll('td');
-                const rowData = Array.from(cols).map(c => '"' + c.innerText.trim().replace(/"/g, '""') + '"');
-                csvContent += rowData.join(",") + "\n";
+            rows.forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cols = row.querySelectorAll('td');
+                    const rowData = Array.from(cols).map(c => '"' + c.innerText.trim().replace(/"/g, '""') + '"');
+                    csvContent += rowData.join(",") + "\n";
+                }
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "NSTP_Report_Export.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            if (window.finishProgressModal) {
+                window.finishProgressModal('CSV Export Complete', 'The CSV report has been generated and downloaded.', 'success');
             }
-        });
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "NSTP_Report_Export.csv");
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+        }, 800);
     }
 </script>
 </div>

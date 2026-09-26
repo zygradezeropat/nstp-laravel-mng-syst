@@ -7,16 +7,6 @@
 <x-page-header title="Instructor Overview" subtitle="Quick snapshot of your assigned classes and pending tasks">
 </x-page-header>
 
-<!-- Alert Banners if any -->
-@if(session('success'))
-<div class="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm transition animate-fade-in">
-    <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Success!</div>
-        <div>{{ session('success') }}</div>
-    </div>
-</div>
-@endif
 
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-6">
     @foreach($stats as $s)

@@ -51,17 +51,24 @@ export function attachInstructorEvents() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const iid = btn.dataset.deleteInst;
-            if (confirm('Are you sure you want to remove this personnel?')) {
-                if (typeof INSTRUCTORS !== 'undefined') {
-                    const idx = INSTRUCTORS.findIndex(i => i.id === iid);
-                    if (idx !== -1) {
-                        const nm = INSTRUCTORS[idx].name;
-                        INSTRUCTORS.splice(idx, 1);
-                        if (window.showToast) window.showToast(`${nm} removed.`, 'success', 'Instructor Removed');
+            window.showConfirmModal({
+                title: 'Remove Instructor',
+                message: 'Are you sure you want to remove this personnel?',
+                confirmText: 'Remove Personnel',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    if (typeof INSTRUCTORS !== 'undefined') {
+                        const idx = INSTRUCTORS.findIndex(i => i.id === iid);
+                        if (idx !== -1) {
+                            const nm = INSTRUCTORS[idx].name;
+                            INSTRUCTORS.splice(idx, 1);
+                            if (window.showToast) window.showToast(`${nm} removed.`, 'success', 'Instructor Removed');
+                        }
                     }
+                    if (typeof render === 'function') render();
                 }
-                if (typeof render === 'function') render();
-            }
+            });
         });
     });
 

@@ -8,7 +8,7 @@ class Announcement extends Model
 {
     protected $table = 'announcements';
 
-    public $timestamps = false;
+    public $timestamps = true;
 
     protected $fillable = [
         'title',
@@ -16,11 +16,16 @@ class Announcement extends Model
         'source',
         'is_pinned',
         'target_role',
+        'component',
+        'scheduled_date',
         'created_at',
+        'updated_at',
     ];
 
     protected $casts = [
-        'is_pinned'  => 'boolean',
-        'created_at' => 'datetime',
+        'is_pinned'      => 'boolean',
+        'scheduled_date' => 'date',
+        'created_at'     => 'datetime',
+        'updated_at'     => 'datetime',
     ];
 }

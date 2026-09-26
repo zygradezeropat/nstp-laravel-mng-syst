@@ -616,8 +616,13 @@ class RotcController extends Controller
         $currentMonthStart = $selectedMonth->copy()->startOfMonth();
         $currentMonthEnd = $selectedMonth->copy()->endOfMonth();
 
-        // 1. Fetch global activities
-        $activitiesDb = Activity::whereBetween('activity_date', [$currentMonthStart, $currentMonthEnd])->get();
+        // 1. Fetch activities for ROTC & General
+        $activitiesDb = Activity::whereBetween('activity_date', [$currentMonthStart, $currentMonthEnd])
+            ->where(function ($q) {
+                $q->whereIn('component', ['ROTC', 'General', 'ALL', 'All'])
+                  ->orWhereNull('component');
+            })
+            ->get();
 
         // 2. Fetch approved activity plans for ROTC
         $approvedPlans = ActivityPlan::with('section')
@@ -632,17 +637,29 @@ class RotcController extends Controller
             ->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
             ->get();
 
-        // 3. Merge them, preventing duplicates
+        // 3. Fetch announcements for ROTC & All
+        $announcementsDb = \App\Models\Announcement::whereIn('target_role', ['All', 'ROTC', 'ROTC Officer', 'Instructors', 'Instructor'])
+            ->where(function ($q) use ($currentMonthStart, $currentMonthEnd) {
+                $q->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
+                  ->orWhere(function ($q2) use ($currentMonthStart, $currentMonthEnd) {
+                      $q2->whereNull('scheduled_date')
+                         ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd]);
+                  });
+            })
+            ->get();
+
+        // 4. Merge them into a unified list
         $activities = collect();
 
         foreach ($activitiesDb as $act) {
             $activities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component,
+                'component' => $act->component ?? 'ROTC',
                 'activity_date' => $act->activity_date,
-                'location' => $act->location,
-                'description' => $act->description,
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
                 'is_plan' => false,
+                'is_announcement' => false,
             ]);
         }
 
@@ -658,15 +675,34 @@ class RotcController extends Controller
                     'component' => 'ROTC',
                     'activity_date' => $plan->scheduled_date,
                     'location' => $plan->location ?? 'TBA',
-                    'description' => $plan->objectives ?? $plan->description,
+                    'description' => $plan->objectives ?? $plan->description ?? '',
                     'is_plan' => true,
+                    'is_announcement' => false,
                 ]);
             }
         }
 
-        // 4. Fetch upcoming activities for ROTC
-        $upcomingDb = Activity::where('component', 'ROTC')
-            ->where('activity_date', '>=', now()->startOfDay())
+        foreach ($announcementsDb as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $activities->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'ROTC',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+            ]);
+        }
+
+        // 5. Fetch upcoming activities for ROTC sidebar
+        $upcomingDb = Activity::where('activity_date', '>=', now()->startOfDay())
+            ->where(function ($q) {
+                $q->whereIn('component', ['ROTC', 'General', 'ALL', 'All'])
+                  ->orWhereNull('component');
+            })
             ->orderBy('activity_date', 'asc')
             ->limit(5)
             ->get();
@@ -685,29 +721,67 @@ class RotcController extends Controller
             ->limit(5)
             ->get();
 
-        $upcomingActivities = collect();
+        $upcomingAnn = \App\Models\Announcement::whereIn('target_role', ['All', 'ROTC', 'ROTC Officer', 'Instructors', 'Instructor'])
+            ->where(function ($q) {
+                $q->where('scheduled_date', '>=', now()->startOfDay())
+                  ->orWhere(function ($q2) {
+                      $q2->whereNull('scheduled_date')
+                         ->where('created_at', '>=', now()->startOfDay());
+                  });
+            })->limit(5)->get();
+
+        $rawUpcoming = collect();
+
         foreach ($upcomingDb as $act) {
-            $upcomingActivities->push((object)[
+            $rawUpcoming->push((object)[
                 'title' => $act->title,
+                'component' => $act->component ?? 'ROTC',
                 'activity_date' => $act->activity_date,
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
+                'is_plan' => false,
+                'is_announcement' => false,
                 'color' => 'bg-emerald-500',
             ]);
         }
+
         foreach ($upcomingPlans as $plan) {
-            $exists = $upcomingActivities->contains(function ($existing) use ($plan) {
+            $exists = $rawUpcoming->contains(function ($existing) use ($plan) {
                 return strtolower($existing->title) === strtolower($plan->title) &&
                        $existing->activity_date->toDateString() === $plan->scheduled_date->toDateString();
             });
 
             if (!$exists) {
-                $upcomingActivities->push((object)[
+                $rawUpcoming->push((object)[
                     'title' => $plan->title,
+                    'component' => 'ROTC',
                     'activity_date' => $plan->scheduled_date,
+                    'location' => $plan->location ?? 'TBA',
+                    'description' => $plan->objectives ?? $plan->description ?? '',
+                    'is_plan' => true,
+                    'is_announcement' => false,
                     'color' => 'bg-emerald-500',
                 ]);
             }
         }
-        $upcomingActivities = $upcomingActivities->sortBy('activity_date')->take(5);
+
+        foreach ($upcomingAnn as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $rawUpcoming->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'ROTC',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+                'color' => 'bg-amber-500',
+            ]);
+        }
+
+        $upcomingActivities = $rawUpcoming->sortBy('activity_date')->take(5)->values();
 
         // Precompute navigation months
         $prevMonth = $selectedMonth->copy()->subMonth();

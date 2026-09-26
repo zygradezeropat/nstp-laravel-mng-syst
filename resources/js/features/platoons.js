@@ -75,19 +75,27 @@ export function attachPlatoonEvents() {
     document.querySelectorAll('[data-delete-officer]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!confirm('Remove this officer from the roster?')) return;
-            const sno = btn.dataset.deleteOfficer;
-            const plat = btn.dataset.platName;
+            window.showConfirmModal({
+                title: 'Remove Officer',
+                message: 'Remove this officer from the roster?',
+                confirmText: 'Remove Officer',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    const sno = btn.dataset.deleteOfficer;
+                    const plat = btn.dataset.platName;
 
-            if (typeof S !== 'undefined' && S.platoons && S.platoons[plat]) {
-                const list = S.platoons[plat];
-                const idx = list.findIndex(c => c.id === sno);
-                if (idx !== -1) {
-                    list.splice(idx, 1);
-                    if (window.showToast) window.showToast('Officer removed.', 'success', 'Removed');
-                    if (typeof render === 'function') render();
+                    if (typeof S !== 'undefined' && S.platoons && S.platoons[plat]) {
+                        const list = S.platoons[plat];
+                        const idx = list.findIndex(c => c.id === sno);
+                        if (idx !== -1) {
+                            list.splice(idx, 1);
+                            if (window.showToast) window.showToast('Officer removed.', 'success', 'Removed');
+                            if (typeof render === 'function') render();
+                        }
+                    }
                 }
-            }
+            });
         });
     });
 
@@ -96,15 +104,22 @@ export function attachPlatoonEvents() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             const plat = btn.dataset.deletePlatoon;
-            if (!confirm(`Are you sure you want to delete ${plat}? All assigned officers will be unassigned.`)) return;
-
-            if (typeof S !== 'undefined' && S.platoons && S.unassigned) {
-                const students = S.platoons[plat] || [];
-                S.unassigned = [...S.unassigned, ...students];
-                delete S.platoons[plat];
-                if (window.showToast) window.showToast(`${plat} deleted.`, 'success', 'Platoon Deleted');
-                if (typeof render === 'function') render();
-            }
+            window.showConfirmModal({
+                title: 'Delete Platoon',
+                message: `Are you sure you want to delete ${plat}? All assigned officers will be unassigned.`,
+                confirmText: 'Delete Platoon',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    if (typeof S !== 'undefined' && S.platoons && S.unassigned) {
+                        const students = S.platoons[plat] || [];
+                        S.unassigned = [...S.unassigned, ...students];
+                        delete S.platoons[plat];
+                        if (window.showToast) window.showToast(`${plat} deleted.`, 'success', 'Platoon Deleted');
+                        if (typeof render === 'function') render();
+                    }
+                }
+            });
         });
     });
 }

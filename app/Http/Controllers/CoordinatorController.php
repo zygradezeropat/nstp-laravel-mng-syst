@@ -10,6 +10,7 @@ use App\Models\ActivityPlan;
 use App\Models\AccomplishmentReport;
 use App\Models\Activity;
 use App\Models\AuditLog;
+use App\Models\Announcement;
 use App\Models\CertificateTemplate;
 use Illuminate\Support\Str;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -618,22 +619,31 @@ class CoordinatorController extends Controller
             ->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
             ->get();
 
-        // 3. Merge them, preventing duplicates
+        // 3. Fetch Official Announcements in this month
+        $announcementsDb = Announcement::where(function ($q) use ($currentMonthStart, $currentMonthEnd) {
+            $q->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
+              ->orWhere(function ($q2) use ($currentMonthStart, $currentMonthEnd) {
+                  $q2->whereNull('scheduled_date')
+                     ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd]);
+              });
+        })->get();
+
+        // 4. Merge them into a single collection
         $activities = collect();
 
         foreach ($activitiesDb as $act) {
             $activities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component,
+                'component' => $act->component ?? 'General',
                 'activity_date' => $act->activity_date,
-                'location' => $act->location,
-                'description' => $act->description,
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
                 'is_plan' => false,
+                'is_announcement' => false,
             ]);
         }
 
         foreach ($approvedPlans as $plan) {
-            // Check if already in calendar (match by title and date)
             $exists = $activities->contains(function ($existing) use ($plan) {
                 return strtolower($existing->title) === strtolower($plan->title) &&
                        $existing->activity_date->toDateString() === $plan->scheduled_date->toDateString();
@@ -645,13 +655,29 @@ class CoordinatorController extends Controller
                     'component' => $plan->section?->component ?? 'CWTS',
                     'activity_date' => $plan->scheduled_date,
                     'location' => $plan->location ?? 'TBA',
-                    'description' => $plan->objectives ?? $plan->description,
+                    'description' => $plan->objectives ?? $plan->description ?? '',
                     'is_plan' => true,
+                    'is_announcement' => false,
                 ]);
             }
         }
 
-        // Fetch upcoming activities (next 5, starting from today)
+        foreach ($announcementsDb as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $activities->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'General',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+            ]);
+        }
+
+        // Fetch upcoming activities (starting from today)
         $upcomingDb = Activity::where('activity_date', '>=', now()->startOfDay())
             ->orderBy('activity_date', 'asc')
             ->limit(5)
@@ -664,11 +690,24 @@ class CoordinatorController extends Controller
             ->limit(5)
             ->get();
 
+        $upcomingAnn = Announcement::where(function ($q) {
+            $q->where('scheduled_date', '>=', now()->startOfDay())
+              ->orWhere(function ($q2) {
+                  $q2->whereNull('scheduled_date')
+                     ->where('created_at', '>=', now()->startOfDay());
+              });
+        })->limit(5)->get();
+
         $upcomingActivities = collect();
         foreach ($upcomingDb as $act) {
             $upcomingActivities->push((object)[
                 'title' => $act->title,
+                'component' => $act->component ?? 'General',
                 'activity_date' => $act->activity_date,
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
+                'is_plan' => false,
+                'is_announcement' => false,
             ]);
         }
         foreach ($upcomingPlans as $plan) {
@@ -680,9 +719,28 @@ class CoordinatorController extends Controller
             if (!$exists) {
                 $upcomingActivities->push((object)[
                     'title' => $plan->title,
+                    'component' => $plan->section?->component ?? 'CWTS',
                     'activity_date' => $plan->scheduled_date,
+                    'location' => $plan->location ?? 'TBA',
+                    'description' => $plan->objectives ?? $plan->description ?? '',
+                    'is_plan' => true,
+                    'is_announcement' => false,
                 ]);
             }
+        }
+        foreach ($upcomingAnn as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $upcomingActivities->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'General',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+            ]);
         }
         $upcomingActivities = $upcomingActivities->sortBy('activity_date')->take(5);
 
@@ -693,6 +751,81 @@ class CoordinatorController extends Controller
         return view('coordinator.calendar', compact(
             'activities', 'upcomingActivities', 'selectedMonth', 'prevMonth', 'nextMonth'
         ));
+    }
+
+    public function announcements(Request $request)
+    {
+        $query = Announcement::orderByDesc('is_pinned')
+            ->orderByDesc('created_at');
+
+        if ($search = trim((string)$request->query('search'))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('content', 'like', "%{$search}%")
+                  ->orWhere('source', 'like', "%{$search}%")
+                  ->orWhere('target_role', 'like', "%{$search}%")
+                  ->orWhere('component', 'like', "%{$search}%");
+            });
+        }
+
+        $announcements = $query->paginate(10)->withQueryString();
+
+        $totalCount = Announcement::count();
+        $pinnedCount = Announcement::where('is_pinned', true)->count();
+        $calendarCount = Announcement::whereNotNull('scheduled_date')->count();
+
+        return view('coordinator.announcements', compact('announcements', 'totalCount', 'pinnedCount', 'calendarCount'));
+    }
+
+    public function storeAnnouncement(Request $request)
+    {
+        $data = $request->validate([
+            'title'          => 'required|string|max:255',
+            'content'        => 'required|string',
+            'source'         => 'nullable|string|max:100',
+            'target_role'    => 'nullable|string|max:50',
+            'component'      => 'nullable|string|max:50',
+            'scheduled_date' => 'nullable|date',
+            'is_pinned'      => 'nullable|boolean',
+        ]);
+
+        $announcement = Announcement::create([
+            'title'          => $data['title'],
+            'content'        => $data['content'],
+            'source'         => $data['source'] ?? 'NSTP Office',
+            'target_role'    => $data['target_role'] ?? 'All',
+            'component'      => $data['component'] ?? 'General',
+            'scheduled_date' => $data['scheduled_date'] ?? null,
+            'is_pinned'      => $request->has('is_pinned') ? (bool)$request->is_pinned : false,
+            'created_at'     => now(),
+        ]);
+
+        AuditLog::create([
+            'user_name'    => auth()->user()?->name ?? 'Coordinator',
+            'role'         => 'Coordinator',
+            'action'       => 'Created Announcement',
+            'details'      => "Published announcement: {$announcement->title}",
+            'performed_at' => now(),
+        ]);
+
+        return back()->with('success', "Announcement '{$announcement->title}' published successfully.");
+    }
+
+    public function deleteAnnouncement($id)
+    {
+        $announcement = Announcement::findOrFail($id);
+        $title = $announcement->title;
+        $announcement->delete();
+
+        AuditLog::create([
+            'user_name'    => auth()->user()?->name ?? 'Coordinator',
+            'role'         => 'Coordinator',
+            'action'       => 'Deleted Announcement',
+            'details'      => "Deleted announcement: {$title}",
+            'performed_at' => now(),
+        ]);
+
+        return back()->with('success', "Announcement '{$title}' deleted successfully.");
     }
 
     public function storeActivity(Request $request)
@@ -736,17 +869,84 @@ class CoordinatorController extends Controller
 
     public function archive()
     {
-        $students = Student::onlyTrashed()->get()->map(function($student) {
+        $trashedStudents = Student::onlyTrashed()->orderBy('deleted_at', 'desc')->get();
+        if ($trashedStudents->isEmpty()) {
+            $trashedStudents = Student::withTrashed()->orderBy('created_at', 'desc')->get();
+        }
+
+        $students = $trashedStudents->map(function($student) {
+            $studentId = !empty($student->student_id) ? $student->student_id : 'N/A';
+            $serialNo  = !empty($student->serial_no) ? $student->serial_no : 'N/A';
+
+            $firstName  = trim($student->first_name ?? '');
+            $middleName = trim($student->middle_name ?? '');
+            $lastName   = trim($student->last_name ?? '');
+
+            if ($middleName && !str_ends_with(strtolower($firstName), strtolower($middleName))) {
+                $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleName);
+            } else {
+                $fullName = trim($lastName . ', ' . $firstName);
+            }
+
+            $yearLevelStr = $student->year_level ? ($student->year_level . (
+                $student->year_level == 1 ? 'st' : ($student->year_level == 2 ? 'nd' : ($student->year_level == 3 ? 'rd' : 'th'))
+            ) . ' Year') : '1st Year';
+
+            $dob = $student->date_of_birth ? \Carbon\Carbon::parse($student->date_of_birth)->format('M d, Y') : 'N/A';
+            $archivedDate = $student->deleted_at ? \Carbon\Carbon::parse($student->deleted_at)->format('M d, Y h:i A') : 'N/A';
+
             return (object)[
-                'id' => $student->student_id,
-                'name' => trim($student->last_name . ', ' . $student->first_name, ', '),
-                'course' => $student->course ?? 'N/A',
-                'program' => $student->component ?? 'CWTS',
-                'status' => $student->enrollment_status === 'Completed' ? 'Completed' : 'Incomplete',
+                'db_id'          => $student->id,
+                'id'             => $studentId,
+                'student_id'     => $studentId,
+                'serial_no'      => $serialNo,
+                'first_name'     => $firstName,
+                'middle_name'    => $middleName,
+                'last_name'      => $lastName,
+                'name'           => $fullName ?: 'N/A',
+                'course'         => $student->course ?: 'N/A',
+                'year_level'     => $yearLevelStr,
+                'program'        => $student->component ?: 'CWTS',
+                'status'         => $student->enrollment_status ?: ($student->trashed() ? 'Archived' : 'Active'),
+                'sex'            => $student->sex ?: 'N/A',
+                'gender'         => $student->sex ?: 'N/A',
+                'email'          => $student->email ?: 'N/A',
+                'contact_number' => $student->contact_number ?: 'N/A',
+                'cell_no'        => $student->contact_number ?: 'N/A',
+                'address'        => $student->complete_address ?: 'N/A',
+                'dob'            => $dob,
+                'birth_place'    => $student->place_of_birth ?: 'N/A',
+                'grade'          => $student->grade ?: 'N/A',
+                'numerical_grade'=> $student->numerical_grade ?: 'N/A',
+                'archived_at'    => $archivedDate,
+                'is_trashed'     => $student->trashed(),
             ];
         });
 
         return view('coordinator.archive', compact('students'));
+    }
+
+    public function restoreStudent($id)
+    {
+        $student = Student::withTrashed()->findOrFail($id);
+        $student->restore();
+
+        // Record Audit Log
+        $user = auth()->user();
+        AuditLog::record(
+            'Restored Student',
+            'Students',
+            $student->student_id ?: $student->id,
+            "Restored student {$student->last_name}, {$student->first_name} from Student Archive",
+            'edit',
+            [
+                'username' => $user ? $user->name : 'NSTP Coordinator',
+                'email'    => $user ? $user->email : 'coordinator@dnsc.edu.ph',
+                'role'     => 'coordinator',
+            ]
+        );
+
+        return back()->with('success', "Student {$student->first_name} {$student->last_name} restored successfully.");
     }
 
     public function ocr()
@@ -1339,11 +1539,11 @@ class CoordinatorController extends Controller
 
     public function exportReportPdf(Request $request)
     {
-        $reportType = $request->query('report_type', 'student_performance');
-        $program    = $request->query('program', 'all');
-        $schoolYear = $request->query('school_year', 'all');
-        $sectionId  = $request->query('section_id', 'all');
-        $status     = $request->query('status', 'all');
+        $reportType = $request->input('report_type', $request->query('report_type', 'student_performance'));
+        $program    = $request->input('program', $request->query('program', 'all'));
+        $schoolYear = $request->input('school_year', $request->query('school_year', 'all'));
+        $sectionId  = $request->input('section_id', $request->query('section_id', 'all'));
+        $status     = $request->input('status', $request->query('status', 'all'));
 
         $students = $this->getFilteredStudentPerformance($program, $schoolYear, $sectionId, $status);
 
@@ -1362,10 +1562,19 @@ class CoordinatorController extends Controller
         $pendingCount = $students->where('remarks', 'Pending')->count();
         $totalCount   = $students->count();
 
+        $receivedBy       = $request->input('received_by', $request->query('received_by', 'FELICIDAD L. FORRO'));
+        $receivedByTitle  = $request->input('received_by_title', $request->query('received_by_title', 'Registrar III'));
+        $submittedBy      = $request->input('submitted_by', $request->query('submitted_by', 'DODONGAN, EUGINE B. / DR. EMIL F. BRIONES'));
+        $submittedByTitle = $request->input('submitted_by_title', $request->query('submitted_by_title', 'Professor / NSTP Coordinator'));
+        $receivedSig      = $request->input('received_sig', $request->query('received_sig', null));
+        $submittedSig     = $request->input('submitted_sig', $request->query('submitted_sig', null));
+
         $pdf = Pdf::loadView('coordinator.pdf.report_pdf', compact(
             'reportTitle', 'reportType', 'students', 'program', 'schoolYear',
             'sectionId', 'status', 'generatedAt', 'passedCount', 'failedCount',
-            'pendingCount', 'totalCount'
+            'pendingCount', 'totalCount',
+            'receivedBy', 'receivedByTitle', 'submittedBy', 'submittedByTitle',
+            'receivedSig', 'submittedSig'
         ))->setPaper('letter', 'portrait');
 
         $filename = Str::slug($reportTitle) . '_' . date('Ymd_His') . '.pdf';
@@ -2225,8 +2434,41 @@ class CoordinatorController extends Controller
 
     public function removeStudentFromSection($sectionCode, $studentId)
     {
-        $section = Section::where('section_name', $sectionCode)->firstOrFail();
         $student = Student::findOrFail($studentId);
+        $user = auth()->user();
+
+        if ($sectionCode === 'ALL') {
+            \DB::table('enrollments')
+                ->where('student_id', $student->id)
+                ->delete();
+
+            if (!empty($student->student_id)) {
+                \DB::table('class_list_students')
+                    ->where('student_id', $student->student_id)
+                    ->delete();
+            }
+
+            // Soft delete the student record itself so they appear in the archive with deleted_at set
+            $student->delete();
+
+            // Record Audit Log
+            AuditLog::record(
+                'Deleted Student',
+                'Students',
+                $student->student_id ?: $student->id,
+                "Deleted student record {$student->last_name}, {$student->first_name} from Masterlist",
+                'edit',
+                [
+                    'username' => $user ? $user->name : 'NSTP Coordinator',
+                    'email'    => $user ? $user->email : 'coordinator@dnsc.edu.ph',
+                    'role'     => 'coordinator',
+                ]
+            );
+
+            return back()->with('success', "Student record has been successfully deleted.");
+        }
+
+        $section = Section::where('section_name', $sectionCode)->firstOrFail();
 
         \DB::table('enrollments')
             ->where('student_id', $student->id)
@@ -2234,20 +2476,21 @@ class CoordinatorController extends Controller
             ->delete();
 
         // Remove from class_list_students as well
-        \DB::table('class_list_students')
-            ->where('section_name', $sectionCode)
-            ->where('student_id', $student->student_id)
-            ->delete();
+        if (!empty($student->student_id)) {
+            \DB::table('class_list_students')
+                ->where('section_name', $sectionCode)
+                ->where('student_id', $student->student_id)
+                ->delete();
+        }
 
         // Soft delete the student record itself so they appear in the archive with deleted_at set
         $student->delete();
 
         // Record Audit Log
-        $user = auth()->user();
         AuditLog::record(
             'Deleted Student',
             'Students',
-            $student->student_id,
+            $student->student_id ?: $student->id,
             "Deleted/Unenrolled student {$student->last_name}, {$student->first_name} from section {$section->section_name}",
             'edit',
             [
@@ -2257,7 +2500,7 @@ class CoordinatorController extends Controller
             ]
         );
 
-        return back()->with('success', "Student has been successfully deleted/unenrolled.");
+        return back()->with('success', "Student has been successfully deleted.");
     }
 }
 

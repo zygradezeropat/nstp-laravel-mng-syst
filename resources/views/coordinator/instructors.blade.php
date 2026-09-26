@@ -4,29 +4,6 @@
 
 @section('content')
 
-@if(session('success'))
-<div class="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Success!</div>
-        <div>{{ session('success') }}</div>
-    </div>
-</div>
-@endif
-
-@if($errors->any())
-<div class="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="alertc" class="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Error submitting form:</div>
-        <ul class="list-disc list-inside mt-1 space-y-0.5">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-</div>
-@endif
 
 <x-page-header title="Instructor Management" subtitle="Manage faculty profiles, department assignments, and contact details">
     <x-slot name="actions">
@@ -89,7 +66,7 @@
 <!-- New Instructor Modal -->
 <div id="newInstructorOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm {{ $errors->any() ? '' : 'hidden' }}">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form method="POST" action="{{ route('coordinator.instructors.store') }}">
+        <form method="POST" action="{{ route('coordinator.instructors.store') }}" data-progress-title="Adding Instructor" data-progress-subtitle="Registering faculty account and setting up assignments...">
             @csrf
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                 <div>
@@ -158,7 +135,7 @@
 <!-- Edit Instructor Modal -->
 <div id="editInstructorOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form id="editInstructorForm" method="POST" action="">
+        <form id="editInstructorForm" method="POST" action="" data-progress-title="Updating Instructor Profile" data-progress-subtitle="Saving changes to faculty credentials and section assignment...">
             @csrf
             @method('PUT')
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">

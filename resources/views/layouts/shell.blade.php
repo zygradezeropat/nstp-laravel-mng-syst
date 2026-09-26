@@ -126,11 +126,66 @@
         </div>
     </div>
 
+    <!-- Global Custom Confirmation Modal -->
+    <div id="globalConfirmOverlay" class="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-all duration-300" onclick="if(event.target === this) closeGlobalConfirmModal(false)">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-300 scale-100">
+            <div class="p-6 text-center">
+                <div id="globalConfirmIconContainer" class="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-rose-100/50">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                    </svg>
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 tracking-tight" id="globalConfirmTitle">Confirm Action</h3>
+                <p class="text-sm text-slate-500 mt-2 leading-relaxed" id="globalConfirmMessage">Are you sure you want to proceed?</p>
+            </div>
+            <div class="px-6 py-4 bg-slate-50/80 border-t border-slate-100 flex justify-end gap-3">
+                <button type="button" id="globalConfirmCancelBtn" onclick="closeGlobalConfirmModal(false)" class="px-5 py-2.5 text-sm font-semibold rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 transition-all cursor-pointer">
+                    Cancel
+                </button>
+                <button type="button" id="globalConfirmOkBtn" onclick="closeGlobalConfirmModal(true)" class="px-5 py-2.5 text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 active:scale-95 transition-all shadow-md shadow-rose-600/20 cursor-pointer">
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Progress Execution Modal -->
+    <div id="globalProgressOverlay" class="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/50 backdrop-blur-md hidden transition-all duration-300">
+        <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 p-6 text-center transform transition-all duration-300 scale-100 space-y-5">
+            <div class="relative w-16 h-16 mx-auto flex items-center justify-center">
+                <div class="absolute inset-0 rounded-full border-4 border-indigo-100 animate-pulse"></div>
+                <div class="absolute inset-0 rounded-full border-4 border-t-indigo-600 border-r-transparent border-b-transparent border-l-transparent animate-spin"></div>
+                <svg class="w-7 h-7 text-indigo-600 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-lg font-bold text-slate-800 tracking-tight" id="globalProgressTitle">Processing Execution...</h3>
+                <p class="text-xs text-slate-500 mt-1" id="globalProgressSubtitle">Please wait while the system processes your request.</p>
+            </div>
+            <!-- Progress Bar -->
+            <div class="space-y-1.5">
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden border border-slate-100">
+                    <div id="globalProgressBarFill" class="bg-gradient-to-r from-indigo-500 to-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 15%"></div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] font-semibold text-slate-500">
+                    <span id="globalProgressStatusText">Initializing action...</span>
+                    <span id="globalProgressPercentText">15%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        window.showAlertModal = function(message, title = 'Notice', type = 'warning') {
+        let currentAlertConfirmCallback = null;
+        let currentConfirmCallback = null;
+
+        window.showAlertModal = function(message, title = 'Notice', type = 'warning', onConfirm = null) {
+            currentAlertConfirmCallback = onConfirm;
             const overlay = document.getElementById('globalAlertOverlay');
             if (!overlay) {
                 console.warn(message);
+                if (typeof onConfirm === 'function') onConfirm();
                 return;
             }
             document.getElementById('globalAlertTitle').innerText = title || 'Notice';
@@ -167,17 +222,177 @@
         window.closeGlobalAlertModal = function() {
             const overlay = document.getElementById('globalAlertOverlay');
             if (overlay) overlay.classList.add('hidden');
+            if (typeof currentAlertConfirmCallback === 'function') {
+                const cb = currentAlertConfirmCallback;
+                currentAlertConfirmCallback = null;
+                cb();
+            }
+        };
+
+        window.showConfirmModal = function(optionsOrMessage, onConfirm = null, onCancel = null) {
+            let message = '';
+            let title = 'Confirm Action';
+            let confirmText = 'Confirm';
+            let cancelText = 'Cancel';
+            let isDanger = true;
+
+            if (typeof optionsOrMessage === 'object' && optionsOrMessage !== null) {
+                message = optionsOrMessage.message || '';
+                title = optionsOrMessage.title || title;
+                confirmText = optionsOrMessage.confirmText || confirmText;
+                cancelText = optionsOrMessage.cancelText || cancelText;
+                if (optionsOrMessage.isDanger === false) isDanger = false;
+                if (optionsOrMessage.onConfirm) onConfirm = optionsOrMessage.onConfirm;
+                if (optionsOrMessage.onCancel) onCancel = optionsOrMessage.onCancel;
+            } else {
+                message = String(optionsOrMessage || '');
+            }
+
+            currentConfirmCallback = { onConfirm, onCancel };
+
+            const overlay = document.getElementById('globalConfirmOverlay');
+            if (!overlay) {
+                if (confirm(message)) {
+                    if (typeof onConfirm === 'function') onConfirm();
+                } else {
+                    if (typeof onCancel === 'function') onCancel();
+                }
+                return;
+            }
+
+            document.getElementById('globalConfirmTitle').innerText = title;
+            document.getElementById('globalConfirmMessage').innerText = message;
+            
+            const okBtn = document.getElementById('globalConfirmOkBtn');
+            const cancelBtn = document.getElementById('globalConfirmCancelBtn');
+            const iconContainer = document.getElementById('globalConfirmIconContainer');
+            
+            if (okBtn) okBtn.innerText = confirmText;
+            if (cancelBtn) cancelBtn.innerText = cancelText;
+
+            if (isDanger) {
+                if (okBtn) okBtn.className = 'px-5 py-2.5 text-sm font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 active:scale-95 transition-all shadow-md shadow-rose-600/20 cursor-pointer';
+                if (iconContainer) iconContainer.className = 'w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-rose-100/50';
+            } else {
+                if (okBtn) okBtn.className = 'px-5 py-2.5 text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 transition-all shadow-md shadow-indigo-600/20 cursor-pointer';
+                if (iconContainer) iconContainer.className = 'w-14 h-14 bg-indigo-50 text-indigo-500 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm border border-indigo-100/50';
+            }
+
+            overlay.classList.remove('hidden');
+        };
+
+        window.closeGlobalConfirmModal = function(confirmed) {
+            const overlay = document.getElementById('globalConfirmOverlay');
+            if (overlay) overlay.classList.add('hidden');
+            if (currentConfirmCallback) {
+                const { onConfirm, onCancel } = currentConfirmCallback;
+                currentConfirmCallback = null;
+                if (confirmed) {
+                    if (typeof onConfirm === 'function') onConfirm();
+                } else {
+                    if (typeof onCancel === 'function') onCancel();
+                }
+            }
+        };
+
+        window.showProgressModal = function(title = 'Processing Execution...', subtitle = 'Please wait while the system processes your request.', initialPercent = 25) {
+            const overlay = document.getElementById('globalProgressOverlay');
+            if (!overlay) return;
+            document.getElementById('globalProgressTitle').innerText = title;
+            document.getElementById('globalProgressSubtitle').innerText = subtitle;
+            window.updateProgressModal(initialPercent, 'Executing requested action...');
+            overlay.classList.remove('hidden');
+        };
+
+        window.updateProgressModal = function(percent, statusMessage) {
+            const fill = document.getElementById('globalProgressBarFill');
+            const percentTxt = document.getElementById('globalProgressPercentText');
+            const statusTxt = document.getElementById('globalProgressStatusText');
+            if (fill) fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+            if (percentTxt) percentTxt.innerText = Math.min(100, Math.max(0, percent)) + '%';
+            if (statusTxt && statusMessage) statusTxt.innerText = statusMessage;
+        };
+
+        window.closeProgressModal = function() {
+            const overlay = document.getElementById('globalProgressOverlay');
+            if (overlay) overlay.classList.add('hidden');
+        };
+
+        window.finishProgressModal = function(title, message, type = 'success', onConfirm = null) {
+            window.updateProgressModal(100, 'Execution completed!');
+            setTimeout(() => {
+                window.closeProgressModal();
+                window.showAlertModal(message, title, type, onConfirm);
+            }, 300);
         };
 
         document.addEventListener('keydown', function(e) {
-            if (e.key === 'Escape') closeGlobalAlertModal();
+            if (e.key === 'Escape') {
+                closeGlobalAlertModal();
+                closeGlobalConfirmModal(false);
+                closeProgressModal();
+            }
         });
+
+        // Intercept native form submit with onsubmit="return confirm(...)"
+        document.addEventListener('submit', function(e) {
+            const form = e.target;
+            if (!form) return;
+            if (form.dataset && form.dataset.confirming) {
+                delete form.dataset.confirming;
+                return;
+            }
+            const onsubmitAttr = form.getAttribute('onsubmit');
+            if (onsubmitAttr && onsubmitAttr.includes('confirm(')) {
+                let msg = 'Are you sure you want to perform this action?';
+                const match = onsubmitAttr.match(/confirm\s*\(\s*(['"])(.*?)\1\s*\)/);
+                if (match) {
+                    msg = match[2].replace(/\\'/g, "'").replace(/\\"/g, '"');
+                }
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                window.showConfirmModal({
+                    title: 'Confirm Delete',
+                    message: msg,
+                    confirmText: 'Delete',
+                    cancelText: 'Cancel',
+                    isDanger: true,
+                    onConfirm: () => {
+                        form.dataset.confirming = 'true';
+                        if (window.showProgressModal) {
+                            const title = form.dataset.progressTitle || 'Processing Action...';
+                            const subtitle = form.dataset.progressSubtitle || 'Please wait while the system processes your request.';
+                            window.showProgressModal(title, subtitle, 35);
+                        }
+                        form.submit();
+                    }
+                });
+                return false;
+            }
+        }, true);
 
         // Override native window.alert to present clean modal UI
         window.alert = function(message) {
             window.showAlertModal(message);
         };
     </script>
+
+    @if(session('success'))
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            window.showAlertModal(@json(session('success')), 'Success', 'success');
+        });
+    </script>
+    @endif
+
+    @if(session('error'))
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            window.showAlertModal(@json(session('error')), 'Execution Error', 'error');
+        });
+    </script>
+    @endif
+
     @yield('scripts')
     @stack('scripts')
 </body>

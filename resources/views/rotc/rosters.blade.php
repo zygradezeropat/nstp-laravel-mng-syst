@@ -15,23 +15,6 @@
     </x-slot>
 </x-page-header>
 
-{{-- ── Session Alerts ── --}}
-@if(session('success'))
-    <div class="p-4 mb-4 text-sm text-emerald-800 rounded-lg bg-emerald-50 border border-emerald-200" role="alert">
-        <span class="font-medium">Success!</span> {{ session('success') }}
-    </div>
-@endif
-
-@if($errors->any())
-    <div class="p-4 mb-4 text-sm text-rose-800 rounded-lg bg-rose-50 border border-rose-200" role="alert">
-        <span class="font-medium">Validation errors:</span>
-        <ul class="mt-1.5 list-disc list-inside">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
 
 <x-card class="mt-6">
     {{-- Search & Filters bar --}}
@@ -90,7 +73,7 @@
                                 class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white font-medium transition cursor-pointer">
                             <x-icon name="pencil" class="w-3 h-3" /> Assign
                         </button>
-                        <form action="{{ route('rotc.rosters.delete', $r->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete officer/cadet {{ addslashes($r->name) }}?')">
+                        <form action="{{ route('rotc.rosters.delete', $r->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete officer/cadet {{ addslashes($r->name) }}?')" data-progress-title="Deleting Personnel" data-progress-subtitle="Removing officer/cadet record from ROTC roster...">
                             @csrf
                             @method('DELETE')
                             <button type="submit" class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium transition cursor-pointer">
@@ -117,7 +100,7 @@
                 <x-icon name="close" class="w-5 h-5" />
             </button>
         </div>
-         <form action="{{ route('rotc.rosters.assign') }}" method="POST" class="p-6 space-y-4">
+         <form action="{{ route('rotc.rosters.assign') }}" method="POST" class="p-6 space-y-4" data-progress-title="Updating Assignment" data-progress-subtitle="Assigning cadet to platoon section...">
             @csrf
             <input type="hidden" name="original_student_id" id="modal-original-student-id" />
             <div>
@@ -150,7 +133,7 @@
 <!-- Add Officer Modal -->
 <div id="addOfficerOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form action="{{ route('rotc.rosters.store') }}" method="POST" id="addOfficerForm">
+        <form action="{{ route('rotc.rosters.store') }}" method="POST" id="addOfficerForm" data-progress-title="Adding Officer / Cadet" data-progress-subtitle="Recording personnel credentials in ROTC roster...">
             @csrf
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
                 <div>
@@ -290,37 +273,49 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Export Excel Handler
     document.getElementById('export-roster-btn')?.addEventListener('click', () => {
-        const aoa = [];
-        // Headers
-        aoa.push(["Cadet ID", "Full Name", "Rank", "Platoon Section", "Specialty", "Enrollment Semester"]);
-        
-        let count = 0;
-        document.querySelectorAll('.roster-row').forEach(row => {
-            if (row.style.display !== 'none') {
-                const cells = row.querySelectorAll('td');
-                if (cells.length >= 6) {
-                    aoa.push([
-                        cells[0].innerText.trim(),
-                        cells[1].innerText.trim(),
-                        cells[2].innerText.trim(),
-                        cells[3].innerText.trim(),
-                        cells[4].innerText.trim(),
-                        cells[5].innerText.trim()
-                    ]);
-                    count++;
-                }
-            }
-        });
-
-        if (count === 0) {
-            alert('No roster data is currently visible to export.');
-            return;
+        if (window.showProgressModal) {
+            window.showProgressModal('Exporting ROTC Roster', 'Compiling cadet records into Excel format...', 35);
         }
-        
-        const ws = XLSX.utils.aoa_to_sheet(aoa);
-        const wb = XLSX.utils.book_new();
-        XLSX.book_append_sheet(wb, ws, "ROTC Cadet Roster");
-        XLSX.writeFile(wb, "ROTC_Cadet_Roster.xlsx");
+
+        setTimeout(() => {
+            const aoa = [];
+            // Headers
+            aoa.push(["Cadet ID", "Full Name", "Rank", "Platoon Section", "Specialty", "Enrollment Semester"]);
+            
+            let count = 0;
+            document.querySelectorAll('.roster-row').forEach(row => {
+                if (row.style.display !== 'none') {
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length >= 6) {
+                        aoa.push([
+                            cells[0].innerText.trim(),
+                            cells[1].innerText.trim(),
+                            cells[2].innerText.trim(),
+                            cells[3].innerText.trim(),
+                            cells[4].innerText.trim(),
+                            cells[5].innerText.trim()
+                        ]);
+                        count++;
+                    }
+                }
+            });
+
+            if (count === 0) {
+                if (window.closeProgressModal) window.closeProgressModal();
+                if (window.showAlertModal) window.showAlertModal('No roster data is currently visible to export.', 'Export Notice', 'warning');
+                else alert('No roster data is currently visible to export.');
+                return;
+            }
+            
+            const ws = XLSX.utils.aoa_to_sheet(aoa);
+            const wb = XLSX.utils.book_new();
+            XLSX.book_append_sheet(wb, ws, "ROTC Cadet Roster");
+            XLSX.writeFile(wb, "ROTC_Cadet_Roster.xlsx");
+
+            if (window.finishProgressModal) {
+                window.finishProgressModal('Export Completed', `${count} cadet record(s) exported to Excel successfully.`, 'success');
+            }
+        }, 600);
     });
 });
 </script>

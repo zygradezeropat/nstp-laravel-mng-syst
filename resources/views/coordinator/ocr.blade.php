@@ -1331,7 +1331,11 @@
                             displayResults(historyEntry);
                         }, 500);
 
-                        if (window.showToast) window.showToast(`Successfully synced ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Sync Successful');
+                        if (window.finishProgressModal) {
+                            window.finishProgressModal('OCR Sync Complete', `Successfully synced ${data.summary.total} student grades for section ${data.summary.section}.`, 'success');
+                        } else if (window.showToast) {
+                            window.showToast(`Successfully synced ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Sync Successful');
+                        }
                     } else {
                         throw new Error(data.message || 'Database sync failure.');
                     }
@@ -1474,7 +1478,7 @@
                 // Database Status Badge
                 let syncBadge = std.is_new
                     ? `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-violet-200 bg-violet-50 text-violet-700">Newly Registered</span>`
-                    : `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">Matched in Database</span>`;
+                    : `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">Matched</span>`;
 
                 tr.innerHTML = `
                     <td class="py-3 px-4 text-center">
@@ -1530,30 +1534,44 @@
         // Helper function to trigger Excel export using SheetJS
         const triggerExcelExport = (studentsToExport, exportTitle = 'Exported') => {
             if (!studentsToExport || studentsToExport.length === 0) {
-                if (window.showToast) window.showToast('No student records selected or available for export.', 'warning', 'Export Unavailable');
+                if (window.showAlertModal) {
+                    window.showAlertModal('No student records selected or available for export.', 'Export Notice', 'warning');
+                } else if (window.showToast) {
+                    window.showToast('No student records selected or available for export.', 'warning', 'Export Unavailable');
+                }
                 return;
             }
 
-            const sectionName = resultsSectionName ? resultsSectionName.textContent.replace(' Grades', '').trim() : 'Imported';
-            const component = resultsComponentTag ? resultsComponentTag.textContent.trim() : 'CWTS';
-            
-            const wb = window.XLSX.utils.book_new();
-            const rows = [ CHED_EXCEL_HEADERS ];
-            
-            studentsToExport.forEach((std) => {
-                rows.push(formatChedExcelRow(std, sectionName, component));
-            });
-            
-            const ws = window.XLSX.utils.aoa_to_sheet(rows);
-            ws['!cols'] = getChedColsWidths();
-            
-            const safeSheetName = sectionName.replace(/[:\\/?*\[\]]/g, '').slice(0, 30) || 'Section';
-            window.XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
-            
-            const fileName = `CHED_NSTP_Grades_${sectionName}_${exportTitle}_${Date.now().toString().slice(-6)}.xlsx`;
-            window.XLSX.writeFile(wb, fileName);
-            
-            if (window.showToast) window.showToast(`${studentsToExport.length} student record(s) exported successfully.`, 'success', 'Export Completed');
+            if (window.showProgressModal) {
+                window.showProgressModal('Exporting Roster Excel', `Formatting ${studentsToExport.length} student grade records...`, 35);
+            }
+
+            setTimeout(() => {
+                const sectionName = resultsSectionName ? resultsSectionName.textContent.replace(' Grades', '').trim() : 'Imported';
+                const component = resultsComponentTag ? resultsComponentTag.textContent.trim() : 'CWTS';
+                
+                const wb = window.XLSX.utils.book_new();
+                const rows = [ CHED_EXCEL_HEADERS ];
+                
+                studentsToExport.forEach((std) => {
+                    rows.push(formatChedExcelRow(std, sectionName, component));
+                });
+                
+                const ws = window.XLSX.utils.aoa_to_sheet(rows);
+                ws['!cols'] = getChedColsWidths();
+                
+                const safeSheetName = sectionName.replace(/[:\\/?*\[\]]/g, '').slice(0, 30) || 'Section';
+                window.XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+                
+                const fileName = `CHED_NSTP_Grades_${sectionName}_${exportTitle}_${Date.now().toString().slice(-6)}.xlsx`;
+                window.XLSX.writeFile(wb, fileName);
+                
+                if (window.finishProgressModal) {
+                    window.finishProgressModal('Export Completed', `${studentsToExport.length} student record(s) exported to Excel successfully.`, 'success');
+                } else if (window.showToast) {
+                    window.showToast(`${studentsToExport.length} student record(s) exported successfully.`, 'success', 'Export Completed');
+                }
+            }, 600);
         };
 
         // Export All

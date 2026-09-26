@@ -119,8 +119,8 @@ export function attachImportEvents() {
         const maxMB = 25;
         Array.from(files).forEach(file => {
             const ext = file.name.split('.').pop().toLowerCase();
-            if (!['xlsx', 'xls'].includes(ext)) {
-                alert(`"${file.name}" is not supported. Please upload XLSX or XLS files only.`);
+            if (!['xlsx', 'xls', 'xlsb', 'xlsm', 'csv', 'ods', 'tsv', 'txt', 'xml'].includes(ext)) {
+                alert(`"${file.name}" is not supported. Please upload a valid sheet file (XLSX, XLS, CSV, ODS, TSV, XLSM, XLSB).`);
                 return;
             }
             if (file.size > maxMB * 1024 * 1024) {

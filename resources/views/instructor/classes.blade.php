@@ -17,29 +17,6 @@
         </x-slot>
     </x-page-header>
 
-    @if(session('success'))
-    <div class="mt-6 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm transition animate-fade-in">
-        <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-        <div>
-            <div class="font-bold">Success!</div>
-            <div>{{ session('success') }}</div>
-        </div>
-    </div>
-    @endif
-
-    @if($errors->any())
-    <div class="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2.5 shadow-sm">
-        <x-icon name="alertc" class="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-        <div>
-            <div class="font-bold">Error submitting grade:</div>
-            <ul class="list-disc list-inside mt-1 space-y-0.5">
-                @foreach($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    </div>
-    @endif
 
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mt-6">
         <!-- Class Meta Sidebar -->
@@ -139,7 +116,7 @@
     <!-- Record Grade Modal -->
     <div id="gradeOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition duration-300">
         <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform scale-95 duration-300">
-            <form id="gradeForm" method="POST" action="{{ route('instructor.classes.update_grade') }}">
+            <form id="gradeForm" method="POST" action="{{ route('instructor.classes.update_grade') }}" data-progress-title="Saving Student Grade" data-progress-subtitle="Updating numerical grade and evaluation remarks in database...">
                 @csrf
                 <input type="hidden" name="student_id" id="gradeStudentNo" />
                 <input type="hidden" name="section_code" value="{{ $section->section_name }}" />
@@ -256,28 +233,38 @@
                     return;
                 }
 
-                // Prepare XLSX headers and rows
-                const rows = [
-                    ['Student ID', 'Student Name', 'Course', 'Final Grade', 'Status']
-                ];
+                if (window.showProgressModal) {
+                    window.showProgressModal('Exporting Class Roster', 'Compiling student grades into Excel spreadsheet...', 35);
+                }
 
-                allStudents.forEach(s => {
-                    rows.push([
-                        s.student_no,
-                        s.name,
-                        s.course,
-                        s.final_grade,
-                        s.status
-                    ]);
-                });
+                setTimeout(() => {
+                    // Prepare XLSX headers and rows
+                    const rows = [
+                        ['Student ID', 'Student Name', 'Course', 'Final Grade', 'Status']
+                    ];
 
-                // Generate sheet using SheetJS
-                const wb = XLSX.utils.book_new();
-                const ws = XLSX.utils.aoa_to_sheet(rows);
-                const sectionName = "{{ $section->section_name ?? 'Class' }}";
-                
-                XLSX.utils.book_append_sheet(wb, ws, "Class List");
-                XLSX.writeFile(wb, `Class_List_${sectionName}.xlsx`);
+                    allStudents.forEach(s => {
+                        rows.push([
+                            s.student_no,
+                            s.name,
+                            s.course,
+                            s.final_grade,
+                            s.status
+                        ]);
+                    });
+
+                    // Generate sheet using SheetJS
+                    const wb = XLSX.utils.book_new();
+                    const ws = XLSX.utils.aoa_to_sheet(rows);
+                    const sectionName = "{{ $section->section_name ?? 'Class' }}";
+                    
+                    XLSX.utils.book_append_sheet(wb, ws, "Class List");
+                    XLSX.writeFile(wb, `Class_List_${sectionName}.xlsx`);
+
+                    if (window.finishProgressModal) {
+                        window.finishProgressModal('Export Completed', 'Class roster Excel file generated and downloaded.', 'success');
+                    }
+                }, 600);
             }
         </script>
     @endpush

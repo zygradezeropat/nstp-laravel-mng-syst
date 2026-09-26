@@ -429,14 +429,24 @@
             <tr>
                 <td class="sig-box">
                     <div class="sig-lbl">Received by:</div>
-                    <div class="sig-name">FELICIDAD L. FORRO</div>
-                    <div class="sig-title">Registrar III</div>
+                    <div style="height: 38px; text-align: center; margin-bottom: -12px;">
+                        @if(!empty($receivedSig))
+                            <img src="{{ $receivedSig }}" style="max-height: 38px; max-width: 140px; display: inline-block;" />
+                        @endif
+                    </div>
+                    <div class="sig-name">{{ strtoupper($receivedBy ?? 'FELICIDAD L. FORRO') }}</div>
+                    <div class="sig-title">{{ $receivedByTitle ?? 'Registrar III' }}</div>
                 </td>
                 <td style="width: 12%;"></td>
                 <td class="sig-box">
                     <div class="sig-lbl">Submitted by:</div>
-                    <div class="sig-name">DODONGAN, EUGINE B. / DR. EMIL F. BRIONES</div>
-                    <div class="sig-title">Professor / NSTP Coordinator</div>
+                    <div style="height: 38px; text-align: center; margin-bottom: -12px;">
+                        @if(!empty($submittedSig))
+                            <img src="{{ $submittedSig }}" style="max-height: 38px; max-width: 140px; display: inline-block;" />
+                        @endif
+                    </div>
+                    <div class="sig-name">{{ strtoupper($submittedBy ?? 'DODONGAN, EUGINE B. / DR. EMIL F. BRIONES') }}</div>
+                    <div class="sig-title">{{ $submittedByTitle ?? 'Professor / NSTP Coordinator' }}</div>
                 </td>
             </tr>
         </table>

@@ -5,29 +5,6 @@
 
 @section('content')
 
-@if(session('success'))
-<div class="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Success!</div>
-        <div>{{ session('success') }}</div>
-    </div>
-</div>
-@endif
-
-@if($errors->any())
-<div class="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="alertc" class="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Error submitting form:</div>
-        <ul class="list-disc list-inside mt-1 space-y-0.5">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-</div>
-@endif
 
 <x-page-header title="Sections & Students" subtitle="Manage CWTS, LTS, and ROTC classes and master student database">
     <x-slot name="actions">
@@ -42,7 +19,7 @@
                 </button>
             </div>
 
-            <input type="file" id="xlsxImportInput" accept=".xlsx,.xls,.csv" class="hidden" />
+            <input type="file" id="xlsxImportInput" accept=".xlsx,.xls,.xlsb,.xlsm,.csv,.ods,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.oasis.opendocument.spreadsheet" class="hidden" />
 
             <!-- Action Button for Sections Tab -->
             <button id="actionBtnNewSection" onclick="document.getElementById('newSectionOverlay').classList.remove('hidden')" class="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
@@ -51,7 +28,7 @@
 
             <!-- Action Button for Masterlist Tab (Moved per instructions) -->
             <button id="importXlsxBtn" class="hidden inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition shadow-sm cursor-pointer">
-                <x-icon name="upload" class="w-4 h-4" /> Import Master List XLSX File
+                <x-icon name="upload" class="w-4 h-4" /> Import Master List Sheet File
             </button>
         </div>
     </x-slot>
@@ -238,6 +215,7 @@
                 <th class="py-2 px-3 font-medium">School Year</th>
                 <th class="py-2 px-3 font-medium">Year Level</th>
                 <th class="py-2 px-3 font-medium">Status</th>
+                <th class="py-2 px-3 font-medium text-right">Actions</th>
             </x-slot>
 
             @forelse($masterStudents as $stu)
@@ -286,9 +264,12 @@
                         {{ ucfirst($stu->status) }}
                     </span>
                 </td>
+                <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
+                    <button type="button" onclick="openDeleteStudentModal('{{ $stu->db_id }}', '{{ addslashes($stu->name) }}', '{{ $stu->student_id }}')" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Student Record"><x-icon name="trash" class="w-4 h-4" /></button>
+                </td>
             </tr>
             @empty
-            <tr id="masterlistEmptyRow"><td colspan="8" class="py-8 text-center text-slate-400 text-sm">No masterlist students found in database.</td></tr>
+            <tr id="masterlistEmptyRow"><td colspan="9" class="py-8 text-center text-slate-400 text-sm">No masterlist students found in database.</td></tr>
             @endforelse
         </x-table>
 
@@ -366,16 +347,16 @@
                 </div>
 
                 <div class="border-t border-slate-100 pt-4 space-y-4">
-                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Compare list with Master List (XLSX only)</div>
+                    <div class="text-xs font-bold text-slate-700 uppercase tracking-wider">Compare list with Master List (All Sheet Formats)</div>
                     <div>
                         <div class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                            <span>Class List XLSX</span>
+                            <span>Class List Sheet File</span>
                             <span class="text-rose-500">*</span>
                         </div>
                         <label class="block border-2 border-dashed border-slate-200 hover:border-indigo-300 rounded-xl p-4 text-center bg-slate-50 hover:bg-slate-100/50 transition cursor-pointer">
                             <x-icon name="upload" class="w-5 h-5 text-slate-400 mx-auto" />
-                            <span id="classFileLabel" class="text-xs text-slate-550 mt-1 block truncate">Upload Class List</span>
-                            <input type="file" id="newSecClassFile" accept=".xlsx" class="hidden" />
+                            <span id="classFileLabel" class="text-xs text-slate-550 mt-1 block truncate">Upload Class List Sheet</span>
+                            <input type="file" id="newSecClassFile" accept=".xlsx,.xls,.xlsb,.xlsm,.csv,.ods,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.oasis.opendocument.spreadsheet" class="hidden" />
                         </label>
                     </div>
                     <div id="compareResultContainer" class="hidden text-xs p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800">
@@ -402,7 +383,7 @@
 <!-- Edit Section Modal -->
 <div id="editSectionOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
-        <form id="editSectionForm" method="POST" action="">
+        <form id="editSectionForm" method="POST" action="" data-progress-title="Updating Section" data-progress-subtitle="Saving modified section configurations to database...">
             @csrf
             @method('PUT')
             <div class="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
@@ -453,11 +434,16 @@
                     </select>
                 </div>
             </div>
-            <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-slate-50 rounded-b-2xl">
-                <button type="button" class="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer" onclick="document.getElementById('editSectionOverlay').classList.add('hidden')">Cancel</button>
-                <button type="submit" class="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
-                    <x-icon name="check2" class="w-4 h-4" /> Save Changes
+            <div class="px-6 py-4 border-t border-slate-100 flex items-center justify-between bg-slate-50 rounded-b-2xl">
+                <button type="button" id="editSecDeleteBtn" class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold rounded-xl border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer">
+                    <x-icon name="trash" class="w-4 h-4" /> Delete Section
                 </button>
+                <div class="flex items-center gap-3">
+                    <button type="button" class="px-4 py-2 text-sm font-semibold rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer" onclick="document.getElementById('editSectionOverlay').classList.add('hidden')">Cancel</button>
+                    <button type="submit" class="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition cursor-pointer">
+                        <x-icon name="check2" class="w-4 h-4" /> Save Changes
+                    </button>
+                </div>
             </div>
         </form>
     </div>
@@ -543,10 +529,37 @@
 </div>
 </div>
 
+<!-- Delete Student Confirmation Modal -->
+<div id="deleteStudentOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteStudentModalContainer">
+        <form id="deleteStudentForm" method="POST" action="" data-progress-title="Deleting Student Record" data-progress-subtitle="Removing student record from system database...">
+            @csrf
+            @method('DELETE')
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <x-icon name="trash" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">Delete Student Record</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    Are you sure you want to delete <span id="deleteStudentName" class="font-bold text-slate-800"></span> (<span id="deleteStudentId" class="font-semibold text-slate-700"></span>)?
+                </p>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                    <button type="button" onclick="closeDeleteStudentModal()" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-sm hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                        Delete Record
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <!-- Delete Section Confirmation Modal -->
 <div id="deleteSectionOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteSectionModalContainer">
-        <form id="deleteSectionForm" method="POST" action="">
+        <form id="deleteSectionForm" method="POST" action="" data-progress-title="Deleting Section" data-progress-subtitle="Removing section and unlinking enrolled students...">
             @csrf
             @method('DELETE')
             <div class="p-6 text-center">
@@ -897,6 +910,14 @@
                 }
             }
 
+            const delBtn = document.getElementById('editSecDeleteBtn');
+            if (delBtn) {
+                delBtn.onclick = function() {
+                    document.getElementById('editSectionOverlay').classList.add('hidden');
+                    openDeleteSectionModal(id, code);
+                };
+            }
+
             document.getElementById('editSectionOverlay').classList.remove('hidden');
         };
 
@@ -917,6 +938,30 @@
 
         window.closeDeleteSectionModal = function() {
             const overlay = document.getElementById('deleteSectionOverlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+                overlay.classList.remove('flex');
+            }
+        };
+
+        window.openDeleteStudentModal = function(db_id, name, student_id) {
+            const overlay = document.getElementById('deleteStudentOverlay');
+            const form = document.getElementById('deleteStudentForm');
+            const nameSpan = document.getElementById('deleteStudentName');
+            const idSpan = document.getElementById('deleteStudentId');
+
+            if (!overlay || !form || !nameSpan || !idSpan) return;
+
+            form.action = "{{ route('coordinator.sections.remove_student', ['ALL', ':id']) }}".replace(':id', db_id);
+            nameSpan.textContent = name;
+            idSpan.textContent = student_id;
+
+            overlay.classList.remove('hidden');
+            overlay.classList.add('flex');
+        };
+
+        window.closeDeleteStudentModal = function() {
+            const overlay = document.getElementById('deleteStudentOverlay');
             if (overlay) {
                 overlay.classList.add('hidden');
                 overlay.classList.remove('flex');
@@ -1084,7 +1129,7 @@
                         callback(list);
                     } catch (err) {
                         console.error(err);
-                        alert('Error parsing Excel file. Please upload a valid Class List XLSX file.');
+                        alert('Error parsing spreadsheet file. Please upload a valid Class List sheet file.');
                     }
                 };
                 reader.readAsArrayBuffer(file);

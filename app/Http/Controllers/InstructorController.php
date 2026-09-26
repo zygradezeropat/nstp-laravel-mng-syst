@@ -9,6 +9,7 @@ use App\Models\ActivityPlan;
 use App\Models\AccomplishmentReport;
 use App\Models\Activity;
 use App\Models\AuditLog;
+use App\Models\Announcement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -805,11 +806,23 @@ class InstructorController extends Controller
         return back()->with('success', "Accomplishment Report '{$title}' deleted successfully.");
     }
 
-    public function announcements()
+    public function announcements(Request $request = null)
     {
-        $announcements = [
-            (object)['title' => 'Midterm Grades Deadline', 'author' => 'NSTP Director', 'time' => '2 hours ago', 'body' => 'Please submit all midterm grades by Friday.', 'initials' => 'ND', 'color' => 'from-indigo-500 to-blue-500', 'pinned' => true],
-        ];
+        $request = $request ?? request();
+        $query = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
+            ->orderByDesc('is_pinned')
+            ->orderByDesc('created_at');
+
+        if ($search = trim((string)$request->query('search'))) {
+            $query->where(function ($q) use ($search) {
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('content', 'like', "%{$search}%")
+                  ->orWhere('source', 'like', "%{$search}%");
+            });
+        }
+
+        $announcements = $query->paginate(10)->withQueryString();
+
         return view('instructor.announcements', compact('announcements'));
     }
 
@@ -818,57 +831,116 @@ class InstructorController extends Controller
         $instructorId = Auth::id();
         $year = $request->query('year', now()->year);
         $month = $request->query('month', now()->month);
+        $selectedComponent = $request->query('component', 'all');
+
+        // Retrieve components of sections assigned to this instructor
+        $assignedComponents = Section::where('instructor_id', $instructorId)
+            ->pluck('component')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $defaultComponent = !empty($assignedComponents) ? $assignedComponents[0] : 'CWTS';
 
         $selectedMonth = \Carbon\Carbon::createFromDate($year, $month, 1);
         $currentMonthStart = $selectedMonth->copy()->startOfMonth();
         $currentMonthEnd = $selectedMonth->copy()->endOfMonth();
 
-        // 1. Fetch global activities
+        // 1. Fetch global activities in current month
         $activitiesDb = Activity::whereBetween('activity_date', [$currentMonthStart, $currentMonthEnd])->get();
 
-        // 2. Fetch approved activity plans of this instructor
+        // 2. Fetch approved activity plans of this instructor in current month
         $approvedPlans = ActivityPlan::with('section')
             ->where('instructor_id', $instructorId)
             ->where('status', 'Approved')
             ->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
             ->get();
 
-        // 3. Merge them, preventing duplicates
-        $activities = collect();
+        // 3. Fetch announcements relevant to instructors in current month
+        $announcementsDb = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
+            ->where(function ($q) use ($currentMonthStart, $currentMonthEnd) {
+                $q->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
+                  ->orWhere(function ($q2) use ($currentMonthStart, $currentMonthEnd) {
+                      $q2->whereNull('scheduled_date')
+                         ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd]);
+                  });
+            })->get();
+
+        // 4. Merge them into a single raw collection
+        $rawActivities = collect();
 
         foreach ($activitiesDb as $act) {
-            $activities->push((object)[
+            $rawActivities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component,
+                'component' => $act->component ?? 'General',
                 'activity_date' => $act->activity_date,
-                'location' => $act->location,
-                'description' => $act->description,
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
                 'is_plan' => false,
+                'is_announcement' => false,
             ]);
         }
 
         foreach ($approvedPlans as $plan) {
-            $exists = $activities->contains(function ($existing) use ($plan) {
+            $exists = $rawActivities->contains(function ($existing) use ($plan) {
                 return strtolower($existing->title) === strtolower($plan->title) &&
                        $existing->activity_date->toDateString() === $plan->scheduled_date->toDateString();
             });
 
             if (!$exists) {
-                $activities->push((object)[
+                $comp = $plan->section?->component ?? $defaultComponent;
+                $rawActivities->push((object)[
                     'title' => $plan->title,
-                    'component' => $plan->section?->component ?? 'CWTS',
+                    'component' => $comp,
                     'activity_date' => $plan->scheduled_date,
                     'location' => $plan->location ?? 'TBA',
-                    'description' => $plan->objectives ?? $plan->description,
+                    'description' => $plan->objectives ?? $plan->description ?? '',
                     'is_plan' => true,
+                    'is_announcement' => false,
                 ]);
             }
         }
 
-        // 4. Fetch upcoming activities for the instructor
+        foreach ($announcementsDb as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $rawActivities->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'General',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+            ]);
+        }
+
+        // 5. Filter merged activities based on $selectedComponent
+        $activities = $rawActivities->filter(function ($act) use ($selectedComponent, $assignedComponents) {
+            $actCompUpper = strtoupper(trim($act->component));
+            $selUpper = strtoupper(trim($selectedComponent));
+
+            if ($selUpper === 'ALL') {
+                if (!empty($assignedComponents)) {
+                    $assignedUpper = array_map('strtoupper', $assignedComponents);
+                    return in_array($actCompUpper, $assignedUpper) || in_array($actCompUpper, ['GENERAL', 'ALL']);
+                }
+                return true;
+            }
+
+            if ($selUpper === 'GENERAL') {
+                return in_array($actCompUpper, ['GENERAL', 'ALL']);
+            }
+
+            return $actCompUpper === $selUpper;
+        })->values();
+
+        // 6. Fetch upcoming activities & announcements for sidebar (starting from today)
         $upcomingDb = Activity::where('activity_date', '>=', now()->startOfDay())
             ->orderBy('activity_date', 'asc')
-            ->limit(5)
+            ->limit(10)
             ->get();
 
         $upcomingPlans = ActivityPlan::with('section')
@@ -876,39 +948,107 @@ class InstructorController extends Controller
             ->where('status', 'Approved')
             ->where('scheduled_date', '>=', now()->startOfDay())
             ->orderBy('scheduled_date', 'asc')
-            ->limit(5)
+            ->limit(10)
             ->get();
 
-        $upcomingActivities = collect();
+        $upcomingAnn = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
+            ->where(function ($q) {
+                $q->where('scheduled_date', '>=', now()->startOfDay())
+                  ->orWhere(function ($q2) {
+                      $q2->whereNull('scheduled_date')
+                         ->where('created_at', '>=', now()->startOfDay());
+                  });
+            })->limit(5)->get();
+
+        $rawUpcoming = collect();
+
         foreach ($upcomingDb as $act) {
-            $upcomingActivities->push((object)[
+            $comp = $act->component ?? 'General';
+            $rawUpcoming->push((object)[
                 'title' => $act->title,
+                'component' => $comp,
                 'activity_date' => $act->activity_date,
-                'color' => 'bg-indigo-500',
+                'location' => $act->location ?? 'TBA',
+                'description' => $act->description ?? '',
+                'is_plan' => false,
+                'is_announcement' => false,
+                'color' => match(strtoupper($comp)) {
+                    'CWTS' => 'bg-indigo-500',
+                    'LTS' => 'bg-emerald-500',
+                    'ROTC' => 'bg-rose-500',
+                    default => 'bg-blue-500',
+                },
             ]);
         }
+
         foreach ($upcomingPlans as $plan) {
-            $exists = $upcomingActivities->contains(function ($existing) use ($plan) {
+            $exists = $rawUpcoming->contains(function ($existing) use ($plan) {
                 return strtolower($existing->title) === strtolower($plan->title) &&
                        $existing->activity_date->toDateString() === $plan->scheduled_date->toDateString();
             });
 
             if (!$exists) {
-                $upcomingActivities->push((object)[
+                $comp = $plan->section?->component ?? $defaultComponent;
+                $rawUpcoming->push((object)[
                     'title' => $plan->title,
+                    'component' => $comp,
                     'activity_date' => $plan->scheduled_date,
-                    'color' => 'bg-emerald-500',
+                    'location' => $plan->location ?? 'TBA',
+                    'description' => $plan->objectives ?? $plan->description ?? '',
+                    'is_plan' => true,
+                    'is_announcement' => false,
+                    'color' => match(strtoupper($comp)) {
+                        'CWTS' => 'bg-indigo-500',
+                        'LTS' => 'bg-emerald-500',
+                        'ROTC' => 'bg-rose-500',
+                        default => 'bg-emerald-500',
+                    },
                 ]);
             }
         }
-        $upcomingActivities = $upcomingActivities->sortBy('activity_date')->take(5);
+
+        foreach ($upcomingAnn as $ann) {
+            $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
+            $rawUpcoming->push((object)[
+                'title' => $ann->title,
+                'component' => $ann->component ?? 'General',
+                'activity_date' => $date,
+                'location' => $ann->source ?? 'NSTP Office',
+                'description' => $ann->content,
+                'is_plan' => false,
+                'is_announcement' => true,
+                'target_role' => $ann->target_role ?? 'All',
+                'is_pinned' => (bool)$ann->is_pinned,
+                'color' => 'bg-amber-500',
+            ]);
+        }
+
+        $upcomingActivities = $rawUpcoming->filter(function ($act) use ($selectedComponent, $assignedComponents) {
+            $actCompUpper = strtoupper(trim($act->component));
+            $selUpper = strtoupper(trim($selectedComponent));
+
+            if ($selUpper === 'ALL') {
+                if (!empty($assignedComponents)) {
+                    $assignedUpper = array_map('strtoupper', $assignedComponents);
+                    return in_array($actCompUpper, $assignedUpper) || in_array($actCompUpper, ['GENERAL', 'ALL']);
+                }
+                return true;
+            }
+
+            if ($selUpper === 'GENERAL') {
+                return in_array($actCompUpper, ['GENERAL', 'ALL']);
+            }
+
+            return $actCompUpper === $selUpper;
+        })->sortBy('activity_date')->take(5)->values();
 
         // Precompute navigation months
         $prevMonth = $selectedMonth->copy()->subMonth();
         $nextMonth = $selectedMonth->copy()->addMonth();
 
         return view('instructor.calendar', compact(
-            'activities', 'upcomingActivities', 'selectedMonth', 'prevMonth', 'nextMonth'
+            'activities', 'upcomingActivities', 'selectedMonth', 'prevMonth', 'nextMonth',
+            'selectedComponent', 'assignedComponents'
         ));
     }
 

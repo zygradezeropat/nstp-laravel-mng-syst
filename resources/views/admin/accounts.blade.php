@@ -30,26 +30,6 @@
                 </div>
             </x-slot>
 
-            @if(session('success'))
-            <div class="mb-4 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-sm font-medium flex items-center gap-2">
-                <x-icon name="check" class="w-5 h-5" />
-                {{ session('success') }}
-            </div>
-            @endif
-
-            @if($errors->any())
-            <div class="mb-4 px-4 py-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-medium">
-                <div class="flex items-center gap-2 mb-1">
-                    <x-icon name="alertc" class="w-5 h-5" />
-                    <strong>Please check the errors below:</strong>
-                </div>
-                <ul class="list-disc list-inside ml-2">
-                    @foreach($errors->all() as $error)
-                        <li>{{ $error }}</li>
-                    @endforeach
-                </ul>
-            </div>
-            @endif
 
             <form method="POST" action="{{ route('admin.accounts.store') }}" class="space-y-4 text-sm">
                 @csrf

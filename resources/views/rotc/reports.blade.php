@@ -7,23 +7,6 @@
 <x-page-header title="Report Submission Overview" subtitle="Document and submit completed ROTC activities">
 </x-page-header>
 
-{{-- ── Session Alerts ── --}}
-@if(session('success'))
-    <div class="p-4 mb-4 text-sm text-emerald-800 rounded-lg bg-emerald-50 border border-emerald-200" role="alert">
-        <span class="font-medium">Success!</span> {{ session('success') }}
-    </div>
-@endif
-
-@if($errors->any())
-    <div class="p-4 mb-4 text-sm text-rose-800 rounded-lg bg-rose-50 border border-rose-200" role="alert">
-        <span class="font-medium">Validation errors:</span>
-        <ul class="mt-1.5 list-disc list-inside">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-@endif
 
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
     {{-- LEFT: All Reports --}}

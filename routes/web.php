@@ -63,9 +63,13 @@ Route::middleware('auth')->group(function () {
         Route::delete('/certificate-templates/{id}', [CoordinatorController::class, 'destroyTemplate'])->name('certificate_templates.destroy');
         Route::get('/certificate-templates/{id}', [CoordinatorController::class, 'getTemplate'])->name('certificate_templates.get');
         Route::get('/archive', [CoordinatorController::class, 'archive'])->name('archive');
+        Route::post('/archive/{id}/restore', [CoordinatorController::class, 'restoreStudent'])->name('archive.restore');
         Route::get('/audit', [CoordinatorController::class, 'audit'])->name('audit');
         Route::get('/reports', [CoordinatorController::class, 'reports'])->name('reports');
-        Route::get('/reports/export-pdf', [CoordinatorController::class, 'exportReportPdf'])->name('reports.export_pdf');
+        Route::match(['get', 'post'], '/reports/export-pdf', [CoordinatorController::class, 'exportReportPdf'])->name('reports.export_pdf');
+        Route::get('/announcements', [CoordinatorController::class, 'announcements'])->name('announcements');
+        Route::post('/announcements', [CoordinatorController::class, 'storeAnnouncement'])->name('announcements.store');
+        Route::delete('/announcements/{id}', [CoordinatorController::class, 'deleteAnnouncement'])->name('announcements.delete');
     });
 
     // ── Instructor Pages ─────────────────────────────────────────────────────────

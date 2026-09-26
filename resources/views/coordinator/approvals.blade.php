@@ -4,29 +4,6 @@
 
 @section('content')
 
-@if(session('success'))
-<div class="mb-5 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="check2" class="w-5 h-5 shrink-0 text-emerald-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Success!</div>
-        <div>{{ session('success') }}</div>
-    </div>
-</div>
-@endif
-
-@if($errors->any())
-<div class="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-sm flex items-start gap-2.5 shadow-sm">
-    <x-icon name="alertc" class="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
-    <div>
-        <div class="font-bold">Error submitting review:</div>
-        <ul class="list-disc list-inside mt-1 space-y-0.5">
-            @foreach($errors->all() as $error)
-                <li>{{ $error }}</li>
-            @endforeach
-        </ul>
-    </div>
-</div>
-@endif
 
 <x-page-header title="Approvals & Documents" subtitle="Review and manage activity plans and accomplishment reports">
 </x-page-header>
@@ -389,8 +366,7 @@
 
         <!-- Modal Content -->
         <div class="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-            <!-- Dynamic Status Banner -->
-            <div id="plan-status-banner" class="hidden"></div>
+
 
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -487,8 +463,7 @@
 
         <!-- Modal Content -->
         <div class="px-6 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-            <!-- Dynamic Status Banner -->
-            <div id="report-status-banner" class="hidden"></div>
+
 
             <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -746,22 +721,30 @@
         // Bind Delete Handlers
         const deleteUrl = '/coordinator/approvals/plans/' + id;
         
+        const executePlanDelete = function() {
+            window.showConfirmModal({
+                title: 'Delete Activity Plan',
+                message: 'Are you sure you want to delete this activity plan? This action cannot be undone.',
+                confirmText: 'Delete Plan',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    if (window.showProgressModal) window.showProgressModal('Deleting Activity Plan', 'Removing plan submission from database...', 40);
+                    const delForm = document.getElementById('global-plan-delete-form');
+                    delForm.action = deleteUrl;
+                    delForm.submit();
+                }
+            });
+        };
+
         document.getElementById('plan-delete-btn-pending').onclick = function(e) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this activity plan? This action cannot be undone.')) {
-                const delForm = document.getElementById('global-plan-delete-form');
-                delForm.action = deleteUrl;
-                delForm.submit();
-            }
+            executePlanDelete();
         };
 
         document.getElementById('plan-delete-btn-non-pending').onclick = function(e) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this activity plan? This action cannot be undone.')) {
-                const delForm = document.getElementById('global-plan-delete-form');
-                delForm.action = deleteUrl;
-                delForm.submit();
-            }
+            executePlanDelete();
         };
 
         // Action Form Configuration based on status
@@ -771,17 +754,19 @@
 
         if (status === 'Pending') {
             form.classList.remove('hidden');
-            banner.classList.add('hidden');
+            if (banner) banner.classList.add('hidden');
             document.getElementById('plan-non-pending-footer').classList.add('hidden');
 
             document.getElementById('plan-approve-btn').onclick = function(e) {
                 e.preventDefault();
+                if (window.showProgressModal) window.showProgressModal('Approving Activity Plan', 'Saving approval status and adding to calendar...', 40);
                 form.action = '/coordinator/approvals/plans/' + id + '/approve';
                 form.submit();
             };
 
             document.getElementById('plan-reject-btn').onclick = function(e) {
                 e.preventDefault();
+                if (window.showProgressModal) window.showProgressModal('Rejecting Activity Plan', 'Updating activity plan status to rejected...', 40);
                 form.action = '/coordinator/approvals/plans/' + id + '/reject';
                 form.submit();
             };
@@ -797,23 +782,13 @@
             };
         } else {
             form.classList.add('hidden');
-            banner.classList.remove('hidden');
+            if (banner) banner.classList.add('hidden');
             document.getElementById('plan-non-pending-footer').classList.remove('hidden');
-            banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4";
             
             if (status === 'Approved') {
-                banner.innerHTML = "✓ APPROVED — This activity plan has been approved and successfully scheduled on the activity calendar.";
-                banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-emerald-50 border-emerald-200 text-emerald-800";
                 document.getElementById('plan-delete-btn-non-pending').classList.remove('hidden');
             } else {
                 document.getElementById('plan-delete-btn-non-pending').classList.add('hidden');
-                if (status === 'Rejected') {
-                    banner.innerHTML = "✗ REJECTED — This activity plan has been rejected.";
-                    banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-rose-50 border-rose-200 text-rose-800";
-                } else if (status === 'Revision') {
-                    banner.innerHTML = "⚠ REVISION REQUESTED — Revisions have been requested and are currently pending from the instructor.";
-                    banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-amber-50 border-amber-200 text-amber-800";
-                }
             }
         }
 
@@ -855,22 +830,30 @@
         // Bind Delete Handlers
         const deleteUrl = '/coordinator/approvals/reports/' + id;
         
+        const executeReportDelete = function() {
+            window.showConfirmModal({
+                title: 'Delete Accomplishment Report',
+                message: 'Are you sure you want to delete this accomplishment report? This action cannot be undone.',
+                confirmText: 'Delete Report',
+                cancelText: 'Cancel',
+                isDanger: true,
+                onConfirm: () => {
+                    if (window.showProgressModal) window.showProgressModal('Deleting Accomplishment Report', 'Removing report submission...', 40);
+                    const delForm = document.getElementById('global-report-delete-form');
+                    delForm.action = deleteUrl;
+                    delForm.submit();
+                }
+            });
+        };
+
         document.getElementById('report-delete-btn-pending').onclick = function(e) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this accomplishment report? This action cannot be undone.')) {
-                const delForm = document.getElementById('global-report-delete-form');
-                delForm.action = deleteUrl;
-                delForm.submit();
-            }
+            executeReportDelete();
         };
 
         document.getElementById('report-delete-btn-non-pending').onclick = function(e) {
             e.preventDefault();
-            if (confirm('Are you sure you want to delete this accomplishment report? This action cannot be undone.')) {
-                const delForm = document.getElementById('global-report-delete-form');
-                delForm.action = deleteUrl;
-                delForm.submit();
-            }
+            executeReportDelete();
         };
 
         // Action Form Configuration based on status
@@ -880,17 +863,19 @@
 
         if (status === 'Pending') {
             form.classList.remove('hidden');
-            banner.classList.add('hidden');
+            if (banner) banner.classList.add('hidden');
             document.getElementById('report-non-pending-footer').classList.add('hidden');
 
             document.getElementById('report-approve-btn').onclick = function(e) {
                 e.preventDefault();
+                if (window.showProgressModal) window.showProgressModal('Approving Accomplishment Report', 'Accepting report submission and marking reviewed...', 40);
                 form.action = '/coordinator/approvals/reports/' + id + '/approve';
                 form.submit();
             };
 
             document.getElementById('report-reject-btn').onclick = function(e) {
                 e.preventDefault();
+                if (window.showProgressModal) window.showProgressModal('Rejecting Accomplishment Report', 'Updating report status to rejected...', 40);
                 form.action = '/coordinator/approvals/reports/' + id + '/reject';
                 form.submit();
             };
@@ -906,23 +891,13 @@
             };
         } else {
             form.classList.add('hidden');
-            banner.classList.remove('hidden');
+            if (banner) banner.classList.add('hidden');
             document.getElementById('report-non-pending-footer').classList.remove('hidden');
-            banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4";
             
             if (status === 'Reviewed') {
-                banner.innerHTML = "✓ APPROVED — This accomplishment report has been successfully reviewed and accepted.";
-                banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-emerald-50 border-emerald-200 text-emerald-800";
                 document.getElementById('report-delete-btn-non-pending').classList.remove('hidden');
             } else {
                 document.getElementById('report-delete-btn-non-pending').classList.add('hidden');
-                if (status === 'Rejected') {
-                    banner.innerHTML = "✗ REJECTED — This accomplishment report has been rejected.";
-                    banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-rose-50 border-rose-200 text-rose-800";
-                } else if (status === 'Revision') {
-                    banner.innerHTML = "⚠ REVISION REQUESTED — Revisions have been requested and are currently pending from the instructor.";
-                    banner.className = "p-4 rounded-xl text-sm font-semibold border mb-4 bg-amber-50 border-amber-200 text-amber-800";
-                }
             }
         }
 
