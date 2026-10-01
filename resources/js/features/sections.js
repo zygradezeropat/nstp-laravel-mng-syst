@@ -895,33 +895,54 @@ export function attachSectionEvents() {
         let headerIdx = -1;
 
         if (rows && rows.length > 0) {
-            for (let r = 0; r < Math.min(5, rows.length); r++) {
+            for (let r = 0; r < Math.min(30, rows.length); r++) {
                 const row = rows[r];
-                if (!row) continue;
-                const str = row.join(' ').toLowerCase();
-                if (str.includes('name') || str.includes('serial') || str.includes('surname') || str.includes('student')) {
+                if (!row || !Array.isArray(row)) continue;
+                const rowStr = row.map(c => String(c || '').trim().toLowerCase()).join(' ');
+
+                if (
+                    rowStr.includes('student number') ||
+                    rowStr.includes('student id') ||
+                    rowStr.includes('student no') ||
+                    rowStr.includes('student_id') ||
+                    rowStr.includes('serial no') ||
+                    rowStr.includes('serial number') ||
+                    (rowStr.includes('last name') && rowStr.includes('first name')) ||
+                    (rowStr.includes('surname') && rowStr.includes('first name')) ||
+                    (rowStr.includes('student name') && rowStr.includes('program'))
+                ) {
                     headerIdx = r;
                     break;
                 }
             }
             if (headerIdx === -1) headerIdx = 0;
 
-            dataRows = rows.slice(headerIdx + 1).filter(r => r && r.length > 0 && r.some(c => c !== null && c !== ''));
+            dataRows = rows.slice(headerIdx + 1).filter(r => r && r.length > 0 && r.some(c => c !== null && String(c).trim() !== ''));
 
             const headerRow = rows[headerIdx] || [];
             let nameIdx = -1, surnameIdx = -1, firstIdx = -1, serialIdx = -1, idIdx = -1, nstpIdx = -1, progIdx = -1;
 
             headerRow.forEach((col, idx) => {
-                const val = String(col || '').toLowerCase();
-                if (val.includes('serial')) serialIdx = idx;
-                else if (val.includes('student') || val.includes('id') || val.includes('no')) idIdx = idx;
+                const val = String(col || '').toLowerCase().trim();
+                if (val.includes('serial')) {
+                    serialIdx = idx;
+                } else if (val.includes('student number') || val.includes('student id') || val.includes('student no') || val.includes('student_id') || val === 'id' || val === 'student_number') {
+                    idIdx = idx;
+                }
 
-                if (val.includes('surname') || val.includes('last')) surnameIdx = idx;
-                else if (val.includes('first')) firstIdx = idx;
-                else if (val.includes('name')) nameIdx = idx;
+                if (val.includes('surname') || val.includes('last name') || val.includes('last_name') || val === 'last') {
+                    surnameIdx = idx;
+                } else if (val.includes('first name') || val.includes('first_name') || val === 'first') {
+                    firstIdx = idx;
+                } else if (val.includes('name') && surnameIdx === -1 && firstIdx === -1) {
+                    nameIdx = idx;
+                }
 
-                if (val.includes('nstp') || val.includes('component')) nstpIdx = idx;
-                else if (val.includes('program') || val.includes('course') || val.includes('main program')) progIdx = idx;
+                if (val.includes('nstp') || val.includes('component')) {
+                    nstpIdx = idx;
+                } else if (val.includes('program') || val.includes('course') || val.includes('main program')) {
+                    progIdx = idx;
+                }
             });
 
             const previewRows = dataRows.slice(0, 5);

@@ -794,45 +794,55 @@ class StudentController extends Controller
 
             $headerRowIndex = -1;
 
+            $primaryHeaders = [
+                'student id',
+                'student no',
+                'student number',
+                'student_id',
+                'student_no',
+                'student_number',
+                'serial no',
+                'serial number',
+                'serial_no',
+                'serial_number',
+                'last name',
+                'lastname',
+                'surname',
+                'student name',
+                'student_name',
+                'full name',
+                'fullname',
+            ];
 
-            foreach (
-                $rows as $idx => $row
-            ) {
+            $normalizedPrimaryHeaders = array_map($normalizeHeader, $primaryHeaders);
 
-                foreach (
-                    $row as $cellVal
-                ) {
+            foreach ($rows as $idx => $row) {
+                if (empty($row) || !is_array($row)) {
+                    continue;
+                }
 
-                    if (
-                        $cellVal === null
-                        ||
-                        trim(
-                            (string) $cellVal
-                        ) === ''
-                    ) {
+                $matchedCount = 0;
+                $hasPrimary = false;
+
+                foreach ($row as $cellVal) {
+                    if ($cellVal === null || trim((string) $cellVal) === '') {
                         continue;
                     }
 
+                    $cleanVal = $normalizeHeader($cellVal);
 
-                    $cleanVal =
-                        $normalizeHeader(
-                            $cellVal
-                        );
-
-
-                    if (
-                        in_array(
-                            $cleanVal,
-                            $normalizedKnownHeaders,
-                            true
-                        )
-                    ) {
-
-                        $headerRowIndex =
-                            $idx;
-
-                        break 2;
+                    if (in_array($cleanVal, $normalizedPrimaryHeaders, true)) {
+                        $hasPrimary = true;
                     }
+
+                    if (in_array($cleanVal, $normalizedKnownHeaders, true)) {
+                        $matchedCount++;
+                    }
+                }
+
+                if ($hasPrimary || $matchedCount >= 2) {
+                    $headerRowIndex = $idx;
+                    break;
                 }
             }
 
@@ -1311,11 +1321,11 @@ class StudentController extends Controller
 
 
                 // ====================================================
-                // 18. REQUIRE NAME
+                // 18. REQUIRE NAME OR STUDENT ID / NUMBER
                 // ====================================================
 
                 if (
-                    !$fullName
+                    !$fullName && !$studentNo
                 ) {
 
                     $skippedStudents++;
@@ -1327,7 +1337,7 @@ class StudentController extends Controller
                             $excelRowNumber,
 
                         'message' =>
-                            'Student name is missing.',
+                            'Both student number and student name are missing.',
                     ];
 
 
@@ -1519,7 +1529,20 @@ class StudentController extends Controller
                             ', ',
                             $addressParts
                         )
-                        : null;
+                        : $getVal(
+                            $row,
+                            [
+                                'complete address',
+                                'complete_address',
+                                'address',
+                                'residential address',
+                                'residential_address',
+                                'street',
+                                'purok',
+                                'barangay',
+                                'location',
+                            ]
+                        );
 
 
                 // ====================================================
@@ -1926,9 +1949,15 @@ $parsed = [
                 }
 
 
-                // ====================================================
-                // 27. PREPARE IMPORTED DATA
-                // ====================================================
+                $formattedSex = null;
+                if ($gender) {
+                    $uGender = strtoupper(trim($gender));
+                    if (str_contains($uGender, 'FEMALE') || $uGender === 'F') {
+                        $formattedSex = 'Female';
+                    } elseif (str_contains($uGender, 'MALE') || $uGender === 'M') {
+                        $formattedSex = 'Male';
+                    }
+                }
 
                 $incomingData = [
 
@@ -1960,8 +1989,8 @@ $parsed = [
             ?: null,
 
     'sex' =>
-        $gender
-            ?: null,
+        $formattedSex
+            ?: ($gender ?: null),
 
     'contact_number' =>
         $cellNo
