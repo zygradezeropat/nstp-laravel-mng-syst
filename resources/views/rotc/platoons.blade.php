@@ -246,13 +246,22 @@
                             <input type="file" id="newPlatClassFile" accept=".xlsx,.xls,.xlsb,.xlsm,.csv,.ods,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.oasis.opendocument.spreadsheet" class="hidden" />
                         </label>
                     </div>
-                    <div id="compareResultContainer" class="hidden text-xs p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800">
-                        <div class="font-bold flex items-center justify-between">
+                    <div id="compareResultContainer" class="hidden text-xs p-3.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 transition-all">
+                        <div class="font-bold flex items-center justify-between gap-2">
                             <span>Comparison Results:</span>
-                            <span id="compareCountLabel" class="text-indigo-900 font-extrabold">0 matched</span>
+                            <span id="compareCountLabel" class="text-indigo-900 font-extrabold px-2.5 py-0.5 rounded-md bg-indigo-100/80">0 matched</span>
                         </div>
-                        <div class="mt-1 text-indigo-750 leading-snug">
+                        <div id="compareResultSubtext" class="mt-1 text-indigo-750 leading-snug">
                             Matched against the globally imported Master List. Non-matching and anonymous names have been filtered out.
+                        </div>
+                        <div id="compareDetailsBox" class="hidden mt-2.5 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900 space-y-1 text-[11px]">
+                            <div class="font-bold flex items-center gap-1.5 text-amber-800">
+                                <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                <span id="compareDetailsTitle">Skipped Cadets Notice</span>
+                            </div>
+                            <div id="compareDetailsBody" class="text-amber-800 leading-relaxed font-normal">
+                                <!-- Dynamic reasons -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -477,7 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (val === 'student id' || val === 'student_id' || val === 'student no' || val === 'student_no' || val === 'student number' || val === 'student_number' || val === 'serial no' || val === 'serial_no' || val === 'serial number' || val === 'id' || val === 'id_number' || val === 'id number' || val === 'id_no' || val === 'id no') {
                             tId = c;
-                        } else if ((val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile')) {
+                        } else if (/\b(id|no|num|number|code)\b/i.test(val) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile') && !val.includes('middle') && !val.includes('address')) {
                             tId = c;
                         }
 
@@ -586,6 +595,79 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsArrayBuffer(file);
     }
 
+    function updatePlatoonCompareDetails(res) {
+        const detailsBox = document.getElementById('compareDetailsBox');
+        const detailsTitle = document.getElementById('compareDetailsTitle');
+        const detailsBody = document.getElementById('compareDetailsBody');
+
+        if (!detailsBox || !detailsBody) return;
+
+        const unmatched = res.unmatched || [];
+        const review = res.needs_review || [];
+        const totalSkipped = unmatched.length + review.length;
+
+        if (totalSkipped > 0) {
+            let enrolledCount = 0;
+            let enrolledSecNames = new Set();
+            let programMismatchCount = 0;
+            let notFoundCount = 0;
+            let duplicateCount = review.length;
+            let otherReasons = [];
+
+            unmatched.forEach(u => {
+                const reason = u.reason || '';
+                const reasonLower = reason.toLowerCase();
+                if (reasonLower.includes('already enrolled in section')) {
+                    enrolledCount++;
+                    const secMatch = reason.match(/already enrolled in section ([^and]+)/i);
+                    if (secMatch && secMatch[1]) {
+                        enrolledSecNames.add(secMatch[1].trim());
+                    }
+                } else if (reasonLower.includes('registered under') || reasonLower.includes('cannot be added to a')) {
+                    programMismatchCount++;
+                } else if (reasonLower.includes('not found') || reasonLower.includes('no unique student')) {
+                    notFoundCount++;
+                } else {
+                    otherReasons.push(reason);
+                }
+            });
+
+            let summaryHtml = '<ul class="list-disc list-inside space-y-1.5 mt-1 text-[11px] font-medium leading-relaxed">';
+
+            if (enrolledCount > 0) {
+                const secListStr = Array.from(enrolledSecNames).slice(0, 3).join(', ');
+                const secSuffix = secListStr ? ` (e.g., <span class="font-bold text-amber-950">${secListStr}</span>)` : '';
+                summaryHtml += `<li><span class="font-bold text-amber-950">${enrolledCount} cadet(s)</span> cannot be imported because they are already enrolled in an active section/platoon${secSuffix}.</li>`;
+            }
+
+            if (programMismatchCount > 0) {
+                summaryHtml += `<li><span class="font-bold text-amber-950">${programMismatchCount} cadet(s)</span> cannot be imported because their registered NSTP program in the Master List is not ROTC.</li>`;
+            }
+
+            if (notFoundCount > 0) {
+                summaryHtml += `<li><span class="font-bold text-amber-950">${notFoundCount} cadet(s)</span> were not found in the Master Student List or could not be matched by name.</li>`;
+            }
+
+            if (duplicateCount > 0) {
+                summaryHtml += `<li><span class="font-bold text-amber-950">${duplicateCount} cadet(s)</span> appear multiple times in the uploaded sheet.</li>`;
+            }
+
+            if (otherReasons.length > 0 && summaryHtml === '<ul class="list-disc list-inside space-y-1.5 mt-1 text-[11px] font-medium leading-relaxed">') {
+                summaryHtml += `<li><span class="font-bold text-amber-950">${otherReasons.length} cadet(s)</span> were skipped due to database rules.</li>`;
+            }
+
+            summaryHtml += '</ul>';
+
+            if (detailsTitle) {
+                detailsTitle.textContent = `${totalSkipped} Cadet(s) Skipped / Cannot Be Imported`;
+            }
+            detailsBody.innerHTML = summaryHtml;
+            detailsBox.classList.remove('hidden');
+        } else {
+            detailsBox.classList.add('hidden');
+        }
+    }
+
     if (classInput) {
         classInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -597,6 +679,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Run comparison with backend
                 const container = document.getElementById('compareResultContainer');
                 const label = document.getElementById('compareCountLabel');
+                const detailsBox = document.getElementById('compareDetailsBox');
+
+                if (detailsBox) detailsBox.classList.add('hidden');
+
                 if (container && label) {
                     container.classList.remove('hidden');
                     label.textContent = "Matching with Master List...";
@@ -625,6 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (label) {
                             label.textContent = `${res.matched.length} matched cadet(s)`;
                         }
+                        updatePlatoonCompareDetails(res);
                     } else {
                         if (label) label.textContent = "Failed to compare with Master List";
                     }

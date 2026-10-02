@@ -73,7 +73,7 @@ class CoordinatorController extends Controller
         return view('coordinator.dashboard', compact('stats', 'incompleteCount', 'incompleteProfiles', 'recentActivities'));
     }
 
-    public function sections()
+    public function sections(Request $request)
     {
         $progDefs = [
             [
@@ -128,7 +128,27 @@ class CoordinatorController extends Controller
         }
         unset($p);
 
-        $sectionsPaginated = Section::with('instructor')->paginate(5);
+        $sectionsQuery = Section::with('instructor');
+        if ($request->has('search') && !empty(trim($request->input('search')))) {
+            $search = trim($request->input('search'));
+            $sectionsQuery->where(function($q) use ($search) {
+                $q->where('section_name', 'like', "%{$search}%")
+                  ->orWhere('component', 'like', "%{$search}%")
+                  ->orWhere('school_year', 'like', "%{$search}%")
+                  ->orWhere('room', 'like', "%{$search}%")
+                  ->orWhere('semester', 'like', "%{$search}%")
+                  ->orWhereHas('instructor', function($iq) use ($search) {
+                      $iq->where('name', 'like', "%{$search}%");
+                  });
+
+                $searchLower = strtolower($search);
+                if (str_contains('tba', $searchLower) || str_contains('unassigned', $searchLower)) {
+                    $q->orWhereNull('instructor_id');
+                }
+            });
+        }
+
+        $sectionsPaginated = $sectionsQuery->orderBy('section_name')->paginate(10)->withQueryString();
         $mappedCollection = $sectionsPaginated->getCollection()->map(function ($s) {
             $studentCount = \DB::table('students')
                 ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
@@ -2296,7 +2316,15 @@ class CoordinatorController extends Controller
 
     public function deleteSection($id)
     {
-        $section = Section::findOrFail($id);
+        $section = Section::find($id);
+        if (!$section) {
+            $section = Section::where('section_name', $id)->first();
+        }
+
+        if (!$section) {
+            return redirect()->route('coordinator.sections')->with('error', "Section not found or already deleted.");
+        }
+
         $sectionName = $section->section_name;
 
         // Clean up enrollments and class_list_students
@@ -2320,7 +2348,7 @@ class CoordinatorController extends Controller
             ]
         );
 
-        return back()->with('success', "Section {$sectionName} successfully deleted.");
+        return redirect()->route('coordinator.sections')->with('success', "Section {$sectionName} successfully deleted.");
     }
 
     public function instructorInfo($id)

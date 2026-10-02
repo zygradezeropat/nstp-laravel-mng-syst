@@ -65,7 +65,21 @@
         @endforeach
     </div>
 
-    <x-card title="All Sections">
+    <x-card title="All Sections ({{ $sections->total() }})">
+        <x-slot name="action">
+            <div class="relative w-64 sm:w-80">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none flex items-center justify-center">
+                    <x-icon name="search" class="w-4 h-4" />
+                </span>
+                <input type="text" id="sectionSearchInput" value="{{ request('search') }}" placeholder="Live search section, room, instructor..." class="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition shadow-2xs" />
+                @if(request('search'))
+                    <button type="button" onclick="window.location.href='{{ route('coordinator.sections') }}'" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition p-0.5 cursor-pointer" title="Clear search">
+                        <x-icon name="close" class="w-3.5 h-3.5" />
+                    </button>
+                @endif
+            </div>
+        </x-slot>
+
         <x-table>
             <x-slot name="header">
                 <th class="py-2 px-3 font-medium">Section</th>
@@ -79,7 +93,7 @@
             </x-slot>
 
             @forelse($sections as $r)
-            <tr class="border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition" data-program="{{ $r->program }}" onclick="window.location.href='{{ route('coordinator.section_students', $r->code) }}'">
+            <tr class="section-row border-b border-slate-50 hover:bg-indigo-50/40 cursor-pointer transition" data-program="{{ $r->program }}" data-search-text="{{ strtolower($r->code . ' ' . $r->program . ' ' . $r->schoolYear . ' ' . $r->instructor . ' ' . $r->room . ' ' . $r->semester) }}" onclick="window.location.href='{{ route('coordinator.section_students', $r->code) }}'">
                 <td class="py-3 px-3 text-slate-900 font-medium">{{ $r->code }}</td>
                 <td class="py-3 px-3">
                     <span class="text-xs px-2 py-0.5 rounded-full font-semibold {{ $r->program === 'CWTS' ? 'bg-indigo-50 text-indigo-700' : ($r->program === 'LTS' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700') }}">
@@ -361,13 +375,22 @@
                             <input type="file" id="newSecClassFile" accept=".xlsx,.xls,.xlsb,.xlsm,.csv,.ods,.tsv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,application/vnd.oasis.opendocument.spreadsheet" class="hidden" />
                         </label>
                     </div>
-                    <div id="compareResultContainer" class="hidden text-xs p-3 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-800">
-                        <div class="font-bold flex items-center justify-between">
+                    <div id="compareResultContainer" class="hidden text-xs p-3.5 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-900 transition-all">
+                        <div class="font-bold flex items-center justify-between gap-2">
                             <span>Comparison Results:</span>
-                            <span id="compareCountLabel" class="text-indigo-900 font-extrabold">0 matched</span>
+                            <span id="compareCountLabel" class="text-indigo-900 font-extrabold px-2.5 py-0.5 rounded-md bg-indigo-100/80">0 matched</span>
                         </div>
-                        <div class="mt-1 text-indigo-750 leading-snug">
+                        <div id="compareResultSubtext" class="mt-1 text-indigo-750 leading-snug">
                             Matched against the globally imported Master List. Non-matching and anonymous names have been filtered out.
+                        </div>
+                        <div id="compareDetailsBox" class="hidden mt-2.5 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200/80 text-amber-900 space-y-1 text-[11px]">
+                            <div class="font-bold flex items-center gap-1.5 text-amber-800">
+                                <svg class="w-4 h-4 text-amber-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                                <span id="compareDetailsTitle">Skipped Students Notice</span>
+                            </div>
+                            <div id="compareDetailsBody" class="text-amber-800 leading-relaxed font-normal">
+                                <!-- Dynamic reasons -->
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -980,6 +1003,41 @@
             if (input) input.value = '';
         };
 
+        // Live Section Search Handler
+        (function() {
+            const sectionSearchInput = document.getElementById('sectionSearchInput');
+            if (!sectionSearchInput) return;
+
+            let debounceTimer;
+            sectionSearchInput.addEventListener('input', function(e) {
+                const query = e.target.value.toLowerCase().trim();
+                const rows = document.querySelectorAll('.section-row');
+
+                rows.forEach(row => {
+                    const searchData = row.getAttribute('data-search-text') || row.textContent.toLowerCase();
+                    if (!query || searchData.includes(query)) {
+                        row.classList.remove('hidden');
+                    } else {
+                        row.classList.add('hidden');
+                    }
+                });
+
+                clearTimeout(debounceTimer);
+                debounceTimer = setTimeout(() => {
+                    const currentUrl = new URL(window.location.href);
+                    if (query) {
+                        currentUrl.searchParams.set('search', query);
+                        currentUrl.searchParams.set('page', '1');
+                    } else {
+                        currentUrl.searchParams.delete('search');
+                    }
+                    if (currentUrl.href !== window.location.href) {
+                        window.location.href = currentUrl.href;
+                    }
+                }, 750);
+            });
+        })();
+
         // XLSX File Comparison Logic inside Add New Section Modal
         (function() {
             const classInput = document.getElementById('newSecClassFile');
@@ -1042,7 +1100,7 @@
 
                                 if (val === 'student id' || val === 'student_id' || val === 'student no' || val === 'student_no' || val === 'student number' || val === 'student_number' || val === 'serial no' || val === 'serial_no' || val === 'serial number' || val === 'id' || val === 'id_number' || val === 'id number' || val === 'id_no' || val === 'id no') {
                                     tId = c;
-                                } else if ((val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile')) {
+                                } else if (/\b(id|no|num|number|code)\b/i.test(val) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile') && !val.includes('middle') && !val.includes('address')) {
                                     tId = c;
                                 }
 
@@ -1156,12 +1214,89 @@
                 reader.readAsArrayBuffer(file);
             }
 
+            function updateCompareDetails(res) {
+                const detailsBox = document.getElementById('compareDetailsBox');
+                const detailsTitle = document.getElementById('compareDetailsTitle');
+                const detailsBody = document.getElementById('compareDetailsBody');
+
+                if (!detailsBox || !detailsBody) return;
+
+                const unmatched = res.unmatched || [];
+                const review = res.needs_review || [];
+                const totalSkipped = unmatched.length + review.length;
+
+                if (totalSkipped > 0) {
+                    let enrolledCount = 0;
+                    let enrolledSecNames = new Set();
+                    let programMismatchCount = 0;
+                    let notFoundCount = 0;
+                    let duplicateCount = review.length;
+                    let otherReasons = [];
+
+                    unmatched.forEach(u => {
+                        const reason = u.reason || '';
+                        const reasonLower = reason.toLowerCase();
+                        if (reasonLower.includes('already enrolled in section')) {
+                            enrolledCount++;
+                            const secMatch = reason.match(/already enrolled in section ([^and]+)/i);
+                            if (secMatch && secMatch[1]) {
+                                enrolledSecNames.add(secMatch[1].trim());
+                            }
+                        } else if (reasonLower.includes('registered under') || reasonLower.includes('cannot be added to a')) {
+                            programMismatchCount++;
+                        } else if (reasonLower.includes('not found') || reasonLower.includes('no unique student')) {
+                            notFoundCount++;
+                        } else {
+                            otherReasons.push(reason);
+                        }
+                    });
+
+                    let summaryHtml = '<ul class="list-disc list-inside space-y-1.5 mt-1 text-[11px] font-medium leading-relaxed">';
+
+                    if (enrolledCount > 0) {
+                        const secListStr = Array.from(enrolledSecNames).slice(0, 3).join(', ');
+                        const secSuffix = secListStr ? ` (e.g., <span class="font-bold text-amber-950">${secListStr}</span>)` : '';
+                        summaryHtml += `<li><span class="font-bold text-amber-950">${enrolledCount} student(s)</span> cannot be imported because they are already enrolled in an active section${secSuffix}.</li>`;
+                    }
+
+                    if (programMismatchCount > 0) {
+                        summaryHtml += `<li><span class="font-bold text-amber-950">${programMismatchCount} student(s)</span> cannot be imported because their registered NSTP program in the Master List does not match this section.</li>`;
+                    }
+
+                    if (notFoundCount > 0) {
+                        summaryHtml += `<li><span class="font-bold text-amber-950">${notFoundCount} student(s)</span> were not found in the Master Student List or could not be matched by name.</li>`;
+                    }
+
+                    if (duplicateCount > 0) {
+                        summaryHtml += `<li><span class="font-bold text-amber-950">${duplicateCount} student(s)</span> appear multiple times in the uploaded sheet.</li>`;
+                    }
+
+                    if (otherReasons.length > 0 && summaryHtml === '<ul class="list-disc list-inside space-y-1.5 mt-1 text-[11px] font-medium leading-relaxed">') {
+                        summaryHtml += `<li><span class="font-bold text-amber-950">${otherReasons.length} student(s)</span> were skipped due to database rules.</li>`;
+                    }
+
+                    summaryHtml += '</ul>';
+
+                    if (detailsTitle) {
+                        detailsTitle.textContent = `${totalSkipped} Student(s) Skipped / Cannot Be Imported`;
+                    }
+                    detailsBody.innerHTML = summaryHtml;
+                    detailsBox.classList.remove('hidden');
+                } else {
+                    detailsBox.classList.add('hidden');
+                }
+            }
+
             function runComparison() {
                 if (!classStudents) return;
 
                 // Show loading state
                 const container = document.getElementById('compareResultContainer');
                 const label = document.getElementById('compareCountLabel');
+                const detailsBox = document.getElementById('compareDetailsBox');
+
+                if (detailsBox) detailsBox.classList.add('hidden');
+
                 if (container && label) {
                     container.classList.remove('hidden');
                     label.textContent = "Matching with Master List...";
@@ -1193,6 +1328,8 @@
                         if (label) {
                             label.textContent = `${res.matched.length} matched student(s)`;
                         }
+
+                        updateCompareDetails(res);
                     } else {
                         console.error("Database comparison failed:", res.message);
                         if (label) label.textContent = "Failed to compare with Master List";

@@ -173,6 +173,18 @@ class SectionController extends Controller
 
             $importedCount = 0;
 
+            $enrolledMap = DB::table('enrollments')
+                ->join('sections', 'sections.id', '=', 'enrollments.section_id')
+                ->pluck('sections.section_name', 'enrollments.student_id')
+                ->toArray();
+
+            $classListMap = DB::table('class_list_students')
+                ->where('section_name', 'not like', 'temp_%')
+                ->whereNotNull('student_id')
+                ->where('student_id', '!=', '')
+                ->pluck('section_name', 'student_id')
+                ->toArray();
+
 
             /*
             |--------------------------------------------------------------------------
@@ -232,6 +244,16 @@ class SectionController extends Controller
                     */
 
                     if (!$student) {
+                        continue;
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Section enrollment check: Prevent adding students with existing section
+                    |--------------------------------------------------------------------------
+                    */
+                    $alreadyEnrolledSec = $this->getStudentEnrolledSection($student, $enrolledMap, $classListMap);
+                    if ($alreadyEnrolledSec) {
                         continue;
                     }
 
@@ -381,6 +403,16 @@ class SectionController extends Controller
                     */
 
                     if (!$student) {
+                        continue;
+                    }
+
+                    /*
+                    |--------------------------------------------------------------------------
+                    | Section enrollment check: Prevent adding students with existing section
+                    |--------------------------------------------------------------------------
+                    */
+                    $alreadyEnrolledSec = $this->getStudentEnrolledSection($student, $enrolledMap, $classListMap);
+                    if ($alreadyEnrolledSec) {
                         continue;
                     }
 
@@ -807,6 +839,23 @@ class SectionController extends Controller
             |--------------------------------------------------------------------------
             */
 
+            /*
+            |--------------------------------------------------------------------------
+            | BULK PRE-FETCH SECTION ENROLLMENTS INTO MEMORY FOR ULTRA-FAST LOOKUP
+            |--------------------------------------------------------------------------
+            */
+            $enrolledMap = DB::table('enrollments')
+                ->join('sections', 'sections.id', '=', 'enrollments.section_id')
+                ->pluck('sections.section_name', 'enrollments.student_id')
+                ->toArray();
+
+            $classListMap = DB::table('class_list_students')
+                ->where('section_name', 'not like', 'temp_%')
+                ->whereNotNull('student_id')
+                ->where('student_id', '!=', '')
+                ->pluck('section_name', 'student_id')
+                ->toArray();
+
             error_log("=================================================");
             error_log("[COMPARE CLASS LIST DEBUG] Starting comparison for " . count($studentsList) . " rows against " . $dbStudents->count() . " master DB students.");
             error_log("=================================================");
@@ -983,6 +1032,29 @@ class SectionController extends Controller
 
                         /*
                         |--------------------------------------------------------------------------
+                        | SECTION ENROLLMENT CHECK
+                        |
+                        | If student already has an assigned section,
+                        | they CANNOT be added to a new section.
+                        |--------------------------------------------------------------------------
+                        */
+                        $alreadyEnrolledSec = $this->getStudentEnrolledSection($studentById, $enrolledMap, $classListMap);
+                        if ($alreadyEnrolledSec) {
+                            error_log("[ROW " . ($index + 1) . "] REJECTED: Student ID '{$sNo}' is already enrolled in section '{$alreadyEnrolledSec}'.");
+
+                            $unmatchedRows[] = [
+                                'row'       => $index + 1,
+                                'name'      => $sName,
+                                'studentNo' => $sNo,
+                                'program'   => $classListCourse,
+                                'reason'    => "Student is already enrolled in section {$alreadyEnrolledSec} and cannot be added to another section.",
+                            ];
+
+                            continue;
+                        }
+
+                        /*
+                        |--------------------------------------------------------------------------
                         | OPTIONAL SAFETY CHECK
                         |
                         | If Student ID exists but Name and Program
@@ -1090,7 +1162,9 @@ class SectionController extends Controller
             function ($student) use (
                 $sName,
                 $classListCourse,
-                $targetComponent
+                $targetComponent,
+                $enrolledMap,
+                $classListMap
             ) {
 
                 /*
@@ -1103,6 +1177,16 @@ class SectionController extends Controller
                     if ($masterComp !== $targetComponent) {
                         return false;
                     }
+                }
+
+                /*
+                |--------------------------------------------------------------------------
+                | STEP 0.5: SECTION ENROLLMENT CHECK (FAST BATCH LOOKUP)
+                |--------------------------------------------------------------------------
+                */
+                $alreadyEnrolledSec = $this->getStudentEnrolledSection($student, $enrolledMap, $classListMap);
+                if ($alreadyEnrolledSec) {
+                    return false;
                 }
 
                 /*
@@ -1256,6 +1340,17 @@ class SectionController extends Controller
                     $reasonText = $sNo
                         ? "Student ID '{$sNo}' was not found in the master student list."
                         : "No unique student matched by name ('{$sName}') and program ('{$classListCourse}').";
+
+                    $matchedByName = $dbStudents->first(function ($student) use ($sName) {
+                        return $this->studentNameMatches($student, $sName);
+                    });
+                    if ($matchedByName) {
+                        $alreadySec = $this->getStudentEnrolledSection($matchedByName, $enrolledMap, $classListMap);
+                        if ($alreadySec) {
+                            $reasonText = "Student is already enrolled in section {$alreadySec} and cannot be added to another section.";
+                        }
+                    }
+
                     error_log("[ROW " . ($index + 1) . "] UNMATCHED: {$reasonText}");
 
                     $unmatchedRows[] = [
@@ -1273,9 +1368,7 @@ class SectionController extends Controller
                             $classListCourse,
 
                         'reason' =>
-                            $sNo
-                                ? 'Student ID was not found in the master student list.'
-                                : 'No unique student matched by name and program.',
+                            $reasonText,
                     ];
 
 
@@ -1574,6 +1667,48 @@ class SectionController extends Controller
 
             ], 500);
         }
+    }
+
+
+    /**
+     * Check if a student is already enrolled in an active section.
+     * Fast in-memory lookup when batched maps are provided.
+     */
+    private function getStudentEnrolledSection(Student $student, ?array $enrolledMap = null, ?array $classListMap = null): ?string
+    {
+        if ($enrolledMap !== null && $classListMap !== null) {
+            if (isset($enrolledMap[$student->id])) {
+                return $enrolledMap[$student->id];
+            }
+            if (!empty($student->student_id) && isset($classListMap[$student->student_id])) {
+                return $classListMap[$student->student_id];
+            }
+            return null;
+        }
+
+        // Fallback: database query if batched maps are not passed
+        $enrollment = DB::table('enrollments')
+            ->join('sections', 'sections.id', '=', 'enrollments.section_id')
+            ->where('enrollments.student_id', $student->id)
+            ->select('sections.section_name')
+            ->first();
+
+        if ($enrollment && !empty($enrollment->section_name)) {
+            return $enrollment->section_name;
+        }
+
+        if (!empty($student->student_id)) {
+            $classListSec = DB::table('class_list_students')
+                ->where('student_id', $student->student_id)
+                ->where('section_name', 'not like', 'temp_%')
+                ->value('section_name');
+
+            if ($classListSec) {
+                return $classListSec;
+            }
+        }
+
+        return null;
     }
 
 

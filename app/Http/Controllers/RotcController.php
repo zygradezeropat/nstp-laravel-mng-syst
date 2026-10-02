@@ -243,7 +243,15 @@ class RotcController extends Controller
 
     public function deletePlatoon($id)
     {
-        $section = Section::findOrFail($id);
+        $section = Section::find($id);
+        if (!$section) {
+            $section = Section::where('section_name', $id)->first();
+        }
+
+        if (!$section) {
+            return redirect()->route('rotc.platoons')->with('error', "Platoon not found or already deleted.");
+        }
+
         $sectionName = $section->section_name;
 
         // Clean up from class_list_students
@@ -266,7 +274,7 @@ class RotcController extends Controller
             ]
         );
 
-        return back()->with('success', "Platoon {$sectionName} successfully deleted.");
+        return redirect()->route('rotc.platoons')->with('success', "Platoon {$sectionName} successfully deleted.");
     }
 
     public function rosters()
