@@ -861,8 +861,8 @@ class SectionController extends Controller
                 |--------------------------------------------------------------------------
                 */
 
-                if ($sName === '') {
-                    error_log("[ROW " . ($index + 1) . "] Skipped: Name is missing from uploaded Excel row.");
+                if ($sName === '' && $sNo === '') {
+                    error_log("[ROW " . ($index + 1) . "] Skipped: Both Name and Student Number are missing from uploaded Excel row.");
 
                     $unmatchedRows[] = [
 
@@ -879,7 +879,7 @@ class SectionController extends Controller
                             $program,
 
                         'reason' =>
-                            'Name is missing from the class list.',
+                            'Both Name and Student Number are missing from the class list.',
                     ];
 
                     continue;

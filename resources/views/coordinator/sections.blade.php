@@ -204,7 +204,7 @@
     </div>
 
     <!-- Masterlist Students Table -->
-    <x-card title="Masterlist Student Database">
+    <x-card title="Student Masterlist">
         <x-table>
             <x-slot name="header">
                 <th class="py-2 px-3 font-medium">Student ID</th>
@@ -219,7 +219,8 @@
             </x-slot>
 
             @forelse($masterStudents as $stu)
-            <tr class="masterlist-row border-b border-slate-50 hover:bg-indigo-50/30 transition"
+            <tr class="masterlist-row border-b border-slate-50 hover:bg-indigo-50/30 transition cursor-pointer"
+                onclick="openMasterlistStudentModal({{ json_encode($stu) }})"
                 data-student-id="{{ strtolower($stu->student_id) }}"
                 data-serial-no="{{ strtolower($stu->serial_no) }}"
                 data-name="{{ strtolower($stu->name) }}"
@@ -265,6 +266,7 @@
                     </span>
                 </td>
                 <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
+                    <button type="button" onclick="openMasterlistStudentModal({{ json_encode($stu) }})" class="text-slate-400 hover:text-indigo-600 p-1 transition cursor-pointer mr-1" title="View / Edit Full Details"><x-icon name="edit" class="w-4 h-4" /></button>
                     <button type="button" onclick="openDeleteStudentModal('{{ $stu->db_id }}', '{{ addslashes($stu->name) }}', '{{ $stu->student_id }}')" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Student Record"><x-icon name="trash" class="w-4 h-4" /></button>
                 </td>
             </tr>
@@ -1011,80 +1013,99 @@
                         let cellIdx = -1;
                         let emailIdx = -1;
                         let programIdx = -1;
+                        let headerRowIndex = -1;
 
-                        // Detect column indices from the first row (headers)
-                        const headerRow = rows[0] || [];
-                        headerRow.forEach((cell, c) => {
-                            if (!cell) return;
-                            const val = cell.toString().toLowerCase().trim();
-                            if (val === 'last name' || val === 'lastname' || val === 'last') {
-                                lastNameIdx = c;
-                            } else if (val === 'first name' || val === 'firstname' || val === 'first') {
-                                firstNameIdx = c;
-                            } else if (val === 'middle name' || val === 'middlename' || val === 'middle') {
-                                middleNameIdx = c;
-                            } else if (val.includes('name') || val.includes('student') || val.includes('full')) {
-                                nameIdx = c;
-                            }
+                        // Dynamically scan the top 35 rows to locate the actual column header row
+                        for (let r = 0; r < Math.min(rows.length, 35); r++) {
+                            const row = rows[r];
+                            if (!row || !Array.isArray(row)) continue;
 
-                            if (val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) {
-                                idIdx = c;
-                            }
-                            if (val === 'dob' || val.includes('birthday') || (val.includes('birth') && !val.includes('place') && !val.includes('pob'))) {
-                                dobIdx = c;
-                            }
-                            if (val === 'pob' || val.includes('place of birth') || val.includes('birthplace') || val.includes('pob')) {
-                                pobIdx = c;
-                            }
-                            if (val === 'gender' || val === 'sex') {
-                                genderIdx = c;
-                            }
-                            if (val.includes('address')) {
-                                addressIdx = c;
-                            }
-                            if (val.includes('cell') || val.includes('phone') || val.includes('contact') || val.includes('mobile')) {
-                                cellIdx = c;
-                            }
-                            if (val.includes('email') || val.includes('gmail')) {
-                                emailIdx = c;
-                            }
-                            if (val.includes('program') || val.includes('course') || val.includes('class')) {
-                                programIdx = c;
-                            }
-                        });
+                            let tLastName = -1, tFirstName = -1, tMiddleName = -1, tName = -1, tId = -1;
+                            let tDob = -1, tPob = -1, tGender = -1, tAddr = -1, tCell = -1, tEmail = -1, tProg = -1;
 
-                        // Fallback detection if headers did not match exactly
-                        if (nameIdx === -1 && lastNameIdx === -1) {
-                            for (let r = 0; r < Math.min(rows.length, 5); r++) {
-                                const row = rows[r];
-                                if (!row) continue;
-                                for (let c = 0; c < row.length; c++) {
-                                    const val = (row[c] || '').toString().toLowerCase().trim();
-                                    if (val.includes('last')) lastNameIdx = c;
-                                    if (val.includes('first')) firstNameIdx = c;
-                                    if (val.includes('middle')) middleNameIdx = c;
-                                    if (val.includes('name') && nameIdx === -1) nameIdx = c;
-                                    if ((val.includes('no') || val.includes('id') || val.includes('num')) && idIdx === -1) idIdx = c;
+                            row.forEach((cell, c) => {
+                                if (cell === null || cell === undefined) return;
+                                const val = cell.toString().toLowerCase().trim();
+                                if (!val) return;
+
+                                if (val === 'last name' || val === 'lastname' || val === 'last_name' || val === 'last') {
+                                    tLastName = c;
+                                } else if (val === 'first name' || val === 'firstname' || val === 'first_name' || val === 'first') {
+                                    tFirstName = c;
+                                } else if (val === 'middle name' || val === 'middlename' || val === 'middle_name' || val === 'middle') {
+                                    tMiddleName = c;
+                                } else if (val === 'name' || val === 'student name' || val === 'full name' || val === 'student_name' || val === 'fullname' || val === 'complete name') {
+                                    tName = c;
+                                } else if (val.includes('name') && !val.includes('middle') && !val.includes('first') && !val.includes('last') && tName === -1) {
+                                    tName = c;
                                 }
+
+                                if (val === 'student id' || val === 'student_id' || val === 'student no' || val === 'student_no' || val === 'student number' || val === 'student_number' || val === 'serial no' || val === 'serial_no' || val === 'serial number' || val === 'id' || val === 'id_number' || val === 'id number' || val === 'id_no' || val === 'id no') {
+                                    tId = c;
+                                } else if ((val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile')) {
+                                    tId = c;
+                                }
+
+                                if (val === 'dob' || val.includes('birthday') || (val.includes('birth') && !val.includes('place') && !val.includes('pob'))) {
+                                    tDob = c;
+                                }
+                                if (val === 'pob' || val.includes('place of birth') || val.includes('birthplace') || val.includes('pob')) {
+                                    tPob = c;
+                                }
+                                if (val === 'gender' || val === 'sex') {
+                                    tGender = c;
+                                }
+                                if (val.includes('address')) {
+                                    tAddr = c;
+                                }
+                                if (val.includes('cell') || val.includes('phone') || val.includes('contact') || val.includes('mobile')) {
+                                    tCell = c;
+                                }
+                                if (val.includes('email') || val.includes('gmail')) {
+                                    tEmail = c;
+                                }
+                                if (val.includes('program') || val.includes('course') || val.includes('class')) {
+                                    tProg = c;
+                                }
+                            });
+
+                            if (tLastName !== -1 || tFirstName !== -1 || tName !== -1) {
+                                lastNameIdx = tLastName;
+                                firstNameIdx = tFirstName;
+                                middleNameIdx = tMiddleName;
+                                nameIdx = tName;
+                                idIdx = tId;
+                                dobIdx = tDob;
+                                pobIdx = tPob;
+                                genderIdx = tGender;
+                                addressIdx = tAddr;
+                                cellIdx = tCell;
+                                emailIdx = tEmail;
+                                programIdx = tProg;
+                                headerRowIndex = r;
+                                break;
                             }
                         }
 
-                        if (nameIdx === -1 && lastNameIdx === -1) nameIdx = 1; // absolute fallback
-                        if (idIdx === -1) idIdx = 0;     // absolute fallback
+                        // Absolute fallback ONLY if no header row was detected at all
+                        if (headerRowIndex === -1) {
+                            if (nameIdx === -1 && lastNameIdx === -1) nameIdx = 1;
+                        }
 
                         const list = [];
                         rows.forEach((row, index) => {
-                            if (index === 0) return; // skip header
-                            if (!row) return;
+                            if (index <= headerRowIndex) return; // skip headers and metadata
+                            if (!row || !Array.isArray(row)) return;
 
                             let nameStr = '';
                             if (lastNameIdx !== -1 || firstNameIdx !== -1) {
-                                const last = (row[lastNameIdx] || '').toString().trim();
-                                const first = (row[firstNameIdx] || '').toString().trim();
+                                const last = lastNameIdx !== -1 ? (row[lastNameIdx] || '').toString().trim() : '';
+                                const first = firstNameIdx !== -1 ? (row[firstNameIdx] || '').toString().trim() : '';
                                 const middle = middleNameIdx !== -1 ? (row[middleNameIdx] || '').toString().trim() : '';
 
                                 if (last || first) {
-                                    nameStr = last + ', ' + first;
+                                    nameStr = last;
+                                    if (first) nameStr = nameStr ? (nameStr + ', ' + first) : first;
                                     if (middle) {
                                         if (middle.length === 1) {
                                             nameStr += ' ' + middle + '.';
@@ -1097,9 +1118,9 @@
                                 nameStr = (row[nameIdx] || '').toString().trim();
                             }
 
-                            const idStr = (row[idIdx] || '').toString().trim();
+                            const idStr = idIdx !== -1 ? (row[idIdx] || '').toString().trim() : '';
 
-                            if (!nameStr) return;
+                            if (!nameStr && !idStr) return;
 
                             const normalized = nameStr.toLowerCase();
                             if (normalized === 'name' || normalized === 'student name' || normalized === 'full name' || normalized === 'last name') return;
@@ -1115,7 +1136,7 @@
 
                             list.push({
                                 name: nameStr,
-                                studentNo: idStr || ('2024-' + Math.floor(10000 + Math.random() * 90000)),
+                                studentNo: idStr,
                                 gender: genderVal,
                                 dob: dobVal,
                                 birthPlace: pobVal,
@@ -1204,7 +1225,317 @@
                 });
             }
         })();
+
+        // =========================================================================
+        // STUDENT MASTERLIST DETAILS & EDIT MODAL JS HANDLERS
+        // =========================================================================
+        let isMasterlistStudentEditMode = false;
+
+        window.setMasterlistModalMode = function(isEditing) {
+            isMasterlistStudentEditMode = isEditing;
+            const form = document.getElementById('masterlistStudentEditForm');
+            if (!form) return;
+
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(el => {
+                if (el.id === 'editStuDbId') return;
+                el.disabled = !isEditing;
+                if (!isEditing) {
+                    el.classList.add('bg-slate-50/80', 'cursor-not-allowed', 'border-slate-200');
+                    el.classList.remove('bg-white', 'border-slate-300');
+                } else {
+                    el.classList.remove('bg-slate-50/80', 'cursor-not-allowed', 'border-slate-200');
+                    el.classList.add('bg-white', 'border-slate-300');
+                }
+            });
+
+            const btn = document.getElementById('saveMasterStudentBtn');
+            if (btn) {
+                if (!isEditing) {
+                    btn.innerHTML = `<svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg> Edit Record`;
+                    btn.className = "px-4 py-2 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition flex items-center gap-1.5 cursor-pointer";
+                } else {
+                    btn.innerHTML = `<svg class="w-4 h-4 inline-block mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg> Save Changes`;
+                    btn.className = "px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm transition flex items-center gap-1.5 cursor-pointer";
+                }
+            }
+        };
+
+        window.openMasterlistStudentModal = function(stu) {
+            if (!stu) return;
+
+            document.getElementById('editStuDbId').value = stu.db_id || '';
+            document.getElementById('editStuStudentId').value = stu.raw_student_id || (stu.student_id !== 'N/A' ? stu.student_id : '');
+            document.getElementById('editStuSerialNo').value = stu.raw_serial_no || (stu.serial_no !== 'N/A' ? stu.serial_no : '');
+            document.getElementById('editStuFirstName').value = stu.first_name || '';
+            document.getElementById('editStuMiddleName').value = stu.middle_name || '';
+            document.getElementById('editStuLastName').value = stu.last_name || '';
+            document.getElementById('editStuCourse').value = stu.course !== 'N/A' ? stu.course : '';
+            document.getElementById('editStuComponent').value = stu.program || 'CWTS';
+            document.getElementById('editStuYearLevel').value = stu.raw_year_level || 1;
+            document.getElementById('editStuStatus').value = stu.status || 'Active';
+            document.getElementById('editStuSex').value = stu.sex || '';
+            document.getElementById('editStuDob').value = stu.dob || '';
+            document.getElementById('editStuBirthPlace').value = stu.birth_place || '';
+            document.getElementById('editStuContact').value = stu.cell_no || '';
+            document.getElementById('editStuEmail').value = stu.email !== 'N/A' ? stu.email : '';
+            document.getElementById('editStuAddress').value = stu.address || '';
+
+            const sub = document.getElementById('modalStudentHeaderSubtitle');
+            if (sub) {
+                sub.textContent = stu.student_id && stu.student_id !== 'N/A' ? `Student ID: ${stu.student_id}` : `Masterlist Record #${stu.db_id}`;
+            }
+
+            // Start in View Only mode
+            window.setMasterlistModalMode(false);
+
+            const modal = document.getElementById('masterlistStudentModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        };
+
+        window.closeMasterlistStudentModal = function() {
+            const modal = document.getElementById('masterlistStudentModal');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        };
+
+        window.handleMasterlistFooterButtonClick = function() {
+            if (!isMasterlistStudentEditMode) {
+                window.setMasterlistModalMode(true);
+            } else {
+                window.submitEditMasterlistStudent();
+            }
+        };
+
+        window.submitEditMasterlistStudent = function() {
+            const dbId = document.getElementById('editStuDbId').value;
+            if (!dbId) return;
+
+            const firstName = document.getElementById('editStuFirstName').value.trim();
+            const lastName = document.getElementById('editStuLastName').value.trim();
+
+            if (!firstName || !lastName) {
+                alert('First name and Last name are required.');
+                return;
+            }
+
+            const payload = {
+                student_no: document.getElementById('editStuStudentId').value.trim() || null,
+                serial_no: document.getElementById('editStuSerialNo').value.trim() || null,
+                first_name: firstName,
+                middle_name: document.getElementById('editStuMiddleName').value.trim() || null,
+                last_name: lastName,
+                name: `${lastName}, ${firstName} ${document.getElementById('editStuMiddleName').value.trim()}`.trim(),
+                course: document.getElementById('editStuCourse').value.trim() || null,
+                program: document.getElementById('editStuCourse').value.trim() || null,
+                component: document.getElementById('editStuComponent').value,
+                year_level: parseInt(document.getElementById('editStuYearLevel').value) || 1,
+                enrollment_status: document.getElementById('editStuStatus').value,
+                gender: document.getElementById('editStuSex').value || null,
+                dob: document.getElementById('editStuDob').value || null,
+                birth_place: document.getElementById('editStuBirthPlace').value.trim() || null,
+                cell_no: document.getElementById('editStuContact').value.trim() || null,
+                email: document.getElementById('editStuEmail').value.trim() || null,
+                address: document.getElementById('editStuAddress').value.trim() || null,
+            };
+
+            const saveBtn = document.getElementById('saveMasterStudentBtn');
+            const origText = saveBtn ? saveBtn.innerHTML : 'Save Changes';
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = 'Saving...';
+            }
+
+            fetch(`/api/students/${dbId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                body: JSON.stringify(payload)
+            })
+            .then(res => res.json().then(data => ({ status: res.status, body: data })))
+            .then(({ status, body }) => {
+                if (status >= 400) {
+                    throw new Error(body.message || 'Failed to update student record.');
+                }
+
+                closeMasterlistStudentModal();
+                if (window.showToast) {
+                    window.showToast('Student record updated successfully!', 'success', 'Updated');
+                }
+                setTimeout(() => window.location.reload(), 600);
+            })
+            .catch(err => {
+                alert('Error updating student: ' + err.message);
+                console.error(err);
+            })
+            .finally(() => {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = origText;
+                }
+            });
+        };
     </script>
 @endpush
+
+<!-- ========================================================================= -->
+<!-- STUDENT MASTERLIST PROFILE & EDIT MODAL -->
+<!-- ========================================================================= -->
+<div id="masterlistStudentModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4 overflow-y-auto">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-2xl overflow-hidden transform transition-all my-8">
+        <!-- Header -->
+        <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                    <x-icon name="user" class="w-5 h-5" />
+                </div>
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base">Student Masterlist Profile</h3>
+                    <p class="text-xs text-slate-500" id="modalStudentHeaderSubtitle">View and edit student information</p>
+                </div>
+            </div>
+            <button type="button" onclick="closeMasterlistStudentModal()" class="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer">
+                <x-icon name="x" class="w-5 h-5" />
+            </button>
+        </div>
+
+        <!-- Body Form -->
+        <form id="masterlistStudentEditForm" onsubmit="event.preventDefault();" class="p-6 space-y-4 max-h-[72vh] overflow-y-auto">
+            <input type="hidden" id="editStuDbId" />
+
+            <!-- Section 1: Identifiers -->
+            <div class="space-y-1">
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">1. Student Identifiers</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Student ID / Number</label>
+                        <input type="text" id="editStuStudentId" placeholder="e.g. 2025-00059" class="w-full text-xs font-mono rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Serial Number</label>
+                        <input type="text" id="editStuSerialNo" placeholder="e.g. ROTC-2025-1234" class="w-full text-xs font-mono rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 2: Full Name -->
+            <div class="space-y-1 pt-2 border-t border-slate-100">
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">2. Personal Name</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">First Name <span class="text-rose-500">*</span></label>
+                        <input type="text" id="editStuFirstName" required placeholder="First Name" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Middle Name</label>
+                        <input type="text" id="editStuMiddleName" placeholder="Middle Name" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Last Name / Surname <span class="text-rose-500">*</span></label>
+                        <input type="text" id="editStuLastName" required placeholder="Last Name" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 3: Academic & NSTP Program -->
+            <div class="space-y-1 pt-2 border-t border-slate-100">
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">3. Program & Academic Info</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">College Course</label>
+                        <input type="text" id="editStuCourse" placeholder="e.g. BSIT, BSFT" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">NSTP Component</label>
+                        <select id="editStuComponent" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white cursor-pointer">
+                            <option value="CWTS">CWTS</option>
+                            <option value="LTS">LTS</option>
+                            <option value="ROTC">ROTC</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Year Level</label>
+                        <select id="editStuYearLevel" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white cursor-pointer">
+                            <option value="1">1st Year</option>
+                            <option value="2">2nd Year</option>
+                            <option value="3">3rd Year</option>
+                            <option value="4">4th Year</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+                        <select id="editStuStatus" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white cursor-pointer">
+                            <option value="Active">Active</option>
+                            <option value="Completed">Completed</option>
+                            <option value="Passed">Passed</option>
+                            <option value="Failed">Failed</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Dropped">Dropped</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 4: Personal Demographics -->
+            <div class="space-y-1 pt-2 border-t border-slate-100">
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">4. Demographics</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Gender / Sex</label>
+                        <select id="editStuSex" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition bg-white cursor-pointer">
+                            <option value="">Select Gender</option>
+                            <option value="Female">Female</option>
+                            <option value="Male">Male</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Date of Birth</label>
+                        <input type="date" id="editStuDob" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Place of Birth</label>
+                        <input type="text" id="editStuBirthPlace" placeholder="City / Hospital" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section 5: Contact & Address -->
+            <div class="space-y-1 pt-2 border-t border-slate-100">
+                <h4 class="text-[11px] font-bold uppercase tracking-wider text-indigo-600">5. Contact & Address</h4>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Cell / Contact #</label>
+                        <input type="text" id="editStuContact" placeholder="09xxxxxxxxx" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Email Address</label>
+                        <input type="email" id="editStuEmail" placeholder="student@example.com" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                    </div>
+                </div>
+                <div class="pt-2">
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Residential / Complete Address</label>
+                    <input type="text" id="editStuAddress" placeholder="Purok, Barangay, City, Province" class="w-full text-xs rounded-xl border border-slate-200 px-3 py-2 focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition" />
+                </div>
+            </div>
+        </form>
+
+        <!-- Footer -->
+        <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end gap-3">
+            <button type="button" onclick="closeMasterlistStudentModal()" class="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+                Cancel
+            </button>
+            <button type="button" id="saveMasterStudentBtn" onclick="handleMasterlistFooterButtonClick()" class="px-4 py-2 text-xs font-semibold rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition flex items-center gap-1.5 cursor-pointer">
+                Edit Record
+            </button>
+        </div>
+    </div>
+</div>
 
 @endsection

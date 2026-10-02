@@ -448,78 +448,99 @@ document.addEventListener('DOMContentLoaded', () => {
                 let cellIdx = -1;
                 let emailIdx = -1;
                 let programIdx = -1;
+                let headerRowIndex = -1;
                 
-                const headerRow = rows[0] || [];
-                headerRow.forEach((cell, c) => {
-                    if (!cell) return;
-                    const val = cell.toString().toLowerCase().trim();
-                    if (val === 'last name' || val === 'lastname' || val === 'last') {
-                        lastNameIdx = c;
-                    } else if (val === 'first name' || val === 'firstname' || val === 'first') {
-                        firstNameIdx = c;
-                    } else if (val === 'middle name' || val === 'middlename' || val === 'middle') {
-                        middleNameIdx = c;
-                    } else if (val.includes('name') || val.includes('student') || val.includes('full')) {
-                        nameIdx = c;
-                    }
-                    
-                    if (val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) {
-                        idIdx = c;
-                    }
-                    if (val === 'dob' || val.includes('birthday') || (val.includes('birth') && !val.includes('place') && !val.includes('pob'))) {
-                        dobIdx = c;
-                    }
-                    if (val === 'pob' || val.includes('place of birth') || val.includes('birthplace') || val.includes('pob')) {
-                        pobIdx = c;
-                    }
-                    if (val === 'gender' || val === 'sex') {
-                        genderIdx = c;
-                    }
-                    if (val.includes('address')) {
-                        addressIdx = c;
-                    }
-                    if (val.includes('cell') || val.includes('phone') || val.includes('contact') || val.includes('mobile')) {
-                        cellIdx = c;
-                    }
-                    if (val.includes('email') || val.includes('gmail')) {
-                        emailIdx = c;
-                    }
-                    if (val.includes('program') || val.includes('course') || val.includes('class')) {
-                        programIdx = c;
-                    }
-                });
-                
-                if (nameIdx === -1 && lastNameIdx === -1) {
-                    for (let r = 0; r < Math.min(rows.length, 5); r++) {
-                        const row = rows[r];
-                        if (!row) continue;
-                        for (let c = 0; c < row.length; c++) {
-                            const val = (row[c] || '').toString().toLowerCase().trim();
-                            if (val.includes('last')) lastNameIdx = c;
-                            if (val.includes('first')) firstNameIdx = c;
-                            if (val.includes('middle')) middleNameIdx = c;
-                            if (val.includes('name') && nameIdx === -1) nameIdx = c;
-                            if ((val.includes('no') || val.includes('id') || val.includes('num')) && idIdx === -1) idIdx = c;
+                // Dynamically scan the top 35 rows to locate the actual column header row
+                for (let r = 0; r < Math.min(rows.length, 35); r++) {
+                    const row = rows[r];
+                    if (!row || !Array.isArray(row)) continue;
+
+                    let tLastName = -1, tFirstName = -1, tMiddleName = -1, tName = -1, tId = -1;
+                    let tDob = -1, tPob = -1, tGender = -1, tAddr = -1, tCell = -1, tEmail = -1, tProg = -1;
+
+                    row.forEach((cell, c) => {
+                        if (cell === null || cell === undefined) return;
+                        const val = cell.toString().toLowerCase().trim();
+                        if (!val) return;
+
+                        if (val === 'last name' || val === 'lastname' || val === 'last_name' || val === 'last') {
+                            tLastName = c;
+                        } else if (val === 'first name' || val === 'firstname' || val === 'first_name' || val === 'first') {
+                            tFirstName = c;
+                        } else if (val === 'middle name' || val === 'middlename' || val === 'middle_name' || val === 'middle') {
+                            tMiddleName = c;
+                        } else if (val === 'name' || val === 'student name' || val === 'full name' || val === 'student_name' || val === 'fullname' || val === 'complete name') {
+                            tName = c;
+                        } else if (val.includes('name') && !val.includes('middle') && !val.includes('first') && !val.includes('last') && tName === -1) {
+                            tName = c;
                         }
+
+                        if (val === 'student id' || val === 'student_id' || val === 'student no' || val === 'student_no' || val === 'student number' || val === 'student_number' || val === 'serial no' || val === 'serial_no' || val === 'serial number' || val === 'id' || val === 'id_number' || val === 'id number' || val === 'id_no' || val === 'id no') {
+                            tId = c;
+                        } else if ((val.includes('no') || val.includes('id') || val.includes('number') || val.includes('code')) && tId === -1 && !val.includes('cell') && !val.includes('phone') && !val.includes('contact') && !val.includes('mobile')) {
+                            tId = c;
+                        }
+
+                        if (val === 'dob' || val.includes('birthday') || (val.includes('birth') && !val.includes('place') && !val.includes('pob'))) {
+                            tDob = c;
+                        }
+                        if (val === 'pob' || val.includes('place of birth') || val.includes('birthplace') || val.includes('pob')) {
+                            tPob = c;
+                        }
+                        if (val === 'gender' || val === 'sex') {
+                            tGender = c;
+                        }
+                        if (val.includes('address')) {
+                            tAddr = c;
+                        }
+                        if (val.includes('cell') || val.includes('phone') || val.includes('contact') || val.includes('mobile')) {
+                            tCell = c;
+                        }
+                        if (val.includes('email') || val.includes('gmail')) {
+                            tEmail = c;
+                        }
+                        if (val.includes('program') || val.includes('course') || val.includes('class')) {
+                            tProg = c;
+                        }
+                    });
+
+                    if (tLastName !== -1 || tFirstName !== -1 || tName !== -1) {
+                        lastNameIdx = tLastName;
+                        firstNameIdx = tFirstName;
+                        middleNameIdx = tMiddleName;
+                        nameIdx = tName;
+                        idIdx = tId;
+                        dobIdx = tDob;
+                        pobIdx = tPob;
+                        genderIdx = tGender;
+                        addressIdx = tAddr;
+                        cellIdx = tCell;
+                        emailIdx = tEmail;
+                        programIdx = tProg;
+                        headerRowIndex = r;
+                        break;
                     }
                 }
 
-                if (nameIdx === -1 && lastNameIdx === -1) nameIdx = 1;
-                if (idIdx === -1) idIdx = 0;
+                // Absolute fallback ONLY if no header row was detected at all
+                if (headerRowIndex === -1) {
+                    if (nameIdx === -1 && lastNameIdx === -1) nameIdx = 1;
+                }
                 
                 const list = [];
                 rows.forEach((row, index) => {
-                    if (index === 0) return;
-                    if (!row) return;
+                    if (index <= headerRowIndex) return; // skip headers and metadata
+                    if (!row || !Array.isArray(row)) return;
                     
                     let nameStr = '';
                     if (lastNameIdx !== -1 || firstNameIdx !== -1) {
-                        const last = (row[lastNameIdx] || '').toString().trim();
-                        const first = (row[firstNameIdx] || '').toString().trim();
+                        const last = lastNameIdx !== -1 ? (row[lastNameIdx] || '').toString().trim() : '';
+                        const first = firstNameIdx !== -1 ? (row[firstNameIdx] || '').toString().trim() : '';
                         const middle = middleNameIdx !== -1 ? (row[middleNameIdx] || '').toString().trim() : '';
                         
                         if (last || first) {
-                            nameStr = last + ', ' + first;
+                            nameStr = last;
+                            if (first) nameStr = nameStr ? (nameStr + ', ' + first) : first;
                             if (middle) {
                                 nameStr += middle.length === 1 ? ' ' + middle + '.' : ' ' + middle;
                             }
@@ -528,8 +549,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         nameStr = (row[nameIdx] || '').toString().trim();
                     }
                     
-                    const idStr = (row[idIdx] || '').toString().trim();
-                    if (!nameStr) return;
+                    const idStr = idIdx !== -1 ? (row[idIdx] || '').toString().trim() : '';
+                    if (!nameStr && !idStr) return;
                     
                     const normalized = nameStr.toLowerCase();
                     if (normalized === 'name' || normalized === 'student name' || normalized === 'full name' || normalized === 'last name') return;
@@ -545,7 +566,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     list.push({
                         name: nameStr,
-                        studentNo: idStr || ('2024-' + Math.floor(10000 + Math.random() * 90000)),
+                        studentNo: idStr,
                         gender: genderVal,
                         dob: dobVal,
                         birthPlace: pobVal,

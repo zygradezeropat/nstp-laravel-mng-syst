@@ -166,8 +166,12 @@ class CoordinatorController extends Controller
                 'students.year_level',
                 'students.component',
                 'students.enrollment_status',
+                'students.date_of_birth',
+                'students.place_of_birth',
                 'students.sex',
+                'students.contact_number',
                 'students.email',
+                'students.complete_address',
                 'sections.section_name',
                 'sections.school_year',
                 'enrollments.status as enrollment_status_override',
@@ -175,18 +179,20 @@ class CoordinatorController extends Controller
             ->orderBy('students.last_name')
             ->get()
             ->map(function ($s) {
-                $studentId = !empty($s->student_id) ? $s->student_id : 'N/A';
-                $serialNo  = !empty($s->serial_no) ? $s->serial_no : 'N/A';
+                $studentId = !empty($s->student_id) ? $s->student_id : '';
+                $serialNo  = !empty($s->serial_no) ? $s->serial_no : '';
 
                 $firstName = trim($s->first_name ?? '');
                 $middleName = trim($s->middle_name ?? '');
                 $lastName = trim($s->last_name ?? '');
 
-                if ($middleName && !str_ends_with(strtolower($firstName), strtolower($middleName))) {
-                    $fullName = trim($lastName . ', ' . $firstName . ' ' . $middleName);
+                if ($middleName && str_ends_with(strtolower($firstName), strtolower($middleName))) {
+                    $cleanFirst = trim(substr($firstName, 0, strlen($firstName) - strlen($middleName)));
                 } else {
-                    $fullName = trim($lastName . ', ' . $firstName);
+                    $cleanFirst = $firstName;
                 }
+
+                $fullName = trim($lastName . ', ' . $cleanFirst . ($middleName ? ' ' . $middleName : ''));
 
                 $status = $s->enrollment_status_override ?: ($s->enrollment_status ?: 'Active');
                 $yearLevelStr = $s->year_level ? ($s->year_level . (
@@ -194,17 +200,28 @@ class CoordinatorController extends Controller
                 ) . ' Year') : '1st Year';
 
                 return (object)[
-                    'db_id'        => $s->db_id,
-                    'student_id'   => $studentId,
-                    'serial_no'    => $serialNo,
-                    'name'         => $fullName,
-                    'course'       => $s->course ?: 'N/A',
-                    'program'      => $s->component ?: 'CWTS',
-                    'section'      => $s->section_name ?: 'Unassigned',
-                    'school_year'  => $s->school_year ?: '2025-2026',
-                    'year_level'   => $yearLevelStr,
-                    'status'       => $status,
-                    'email'        => $s->email ?: 'N/A',
+                    'db_id'          => $s->db_id,
+                    'student_id'     => $studentId ?: 'N/A',
+                    'raw_student_id' => $studentId,
+                    'serial_no'      => $serialNo ?: 'N/A',
+                    'raw_serial_no'  => $serialNo,
+                    'first_name'     => $cleanFirst,
+                    'middle_name'    => $middleName,
+                    'last_name'      => $lastName,
+                    'name'           => $fullName,
+                    'course'         => $s->course ?: '',
+                    'program'        => $s->component ?: 'CWTS',
+                    'section'        => $s->section_name ?: 'Unassigned',
+                    'school_year'    => $s->school_year ?: '2025-2026',
+                    'year_level'     => $yearLevelStr,
+                    'raw_year_level' => $s->year_level ?: 1,
+                    'status'         => $status,
+                    'dob'            => $s->date_of_birth ? date('Y-m-d', strtotime($s->date_of_birth)) : '',
+                    'birth_place'    => $s->place_of_birth ?: '',
+                    'sex'            => $s->sex ?: '',
+                    'cell_no'        => $s->contact_number ?: '',
+                    'email'          => $s->email ?: '',
+                    'address'        => $s->complete_address ?: '',
                 ];
             });
 

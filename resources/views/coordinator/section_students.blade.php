@@ -20,6 +20,17 @@
 
 <div class="mt-6">
     <x-card title="Enrolled Students ({{ $students->total() }})">
+        <x-slot name="action">
+            <div class="relative w-64 sm:w-80">
+                <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none flex items-center justify-center">
+                    <x-icon name="search" class="w-4 h-4" />
+                </span>
+                <input type="text" id="studentSearchInput" placeholder="Search students..." class="w-full pl-9 pr-8 py-2 text-xs rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition shadow-2xs" />
+                <button type="button" id="clearSearchBtn" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-600 hidden transition p-0.5 cursor-pointer" title="Clear search">
+                    <x-icon name="close" class="w-3.5 h-3.5" />
+                </button>
+            </div>
+        </x-slot>
         <x-table>
             <x-slot name="header">
                 <th class="py-2 px-3 font-medium">Student ID</th>
@@ -326,6 +337,70 @@
             
             document.getElementById('editStudentOverlay').classList.remove('hidden');
         }
+
+        // Live Search Filter for Enrolled Students
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('studentSearchInput');
+            const clearBtn = document.getElementById('clearSearchBtn');
+
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const query = this.value.toLowerCase().trim();
+
+                    if (clearBtn) {
+                        if (query.length > 0) {
+                            clearBtn.classList.remove('hidden');
+                        } else {
+                            clearBtn.classList.add('hidden');
+                        }
+                    }
+
+                    const rows = document.querySelectorAll('table tbody tr');
+                    let visibleCount = 0;
+
+                    rows.forEach(row => {
+                        // Skip empty state row if present
+                        if (row.id === 'noSearchMatchRow' || row.querySelector('td[colspan]')) return;
+
+                        const text = row.textContent.toLowerCase();
+                        if (!query || text.includes(query)) {
+                            row.style.display = '';
+                            visibleCount++;
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+
+                    let noMatchRow = document.getElementById('noSearchMatchRow');
+                    if (visibleCount === 0 && query.length > 0) {
+                        if (!noMatchRow) {
+                            const tbody = document.querySelector('table tbody');
+                            if (tbody) {
+                                noMatchRow = document.createElement('tr');
+                                noMatchRow.id = 'noSearchMatchRow';
+                                const safeQuery = this.value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                                noMatchRow.innerHTML = `<td colspan="10" class="py-8 text-center text-slate-400 text-sm">No students found matching "${safeQuery}".</td>`;
+                                tbody.appendChild(noMatchRow);
+                            }
+                        } else {
+                            noMatchRow.style.display = '';
+                            const safeQuery = this.value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+                            noMatchRow.querySelector('td').innerHTML = `No students found matching "${safeQuery}".`;
+                        }
+                    } else if (noMatchRow) {
+                        noMatchRow.style.display = 'none';
+                    }
+                });
+
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', function() {
+                        searchInput.value = '';
+                        searchInput.dispatchEvent(new Event('input'));
+                        searchInput.focus();
+                    });
+                }
+            }
+        });
     </script>
 @endpush
 

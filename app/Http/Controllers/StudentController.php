@@ -187,137 +187,75 @@ class StudentController extends Controller
         $updates = [];
 
 
-        if (
-            isset(
-                $data['student_no']
-            )
-        ) {
-
-            $updates['student_id'] =
-                $data['student_no'];
+        if (isset($data['student_no'])) {
+            $updates['student_id'] = $data['student_no'];
         }
 
-
-        if (
-            isset(
-                $data['name']
-            )
-        ) {
-
-            $parts =
-                Student::parseName(
-                    $data['name']
-                );
-
-            $updates['first_name'] =
-                $parts['first_name'];
-
-            $updates['last_name'] =
-                $parts['last_name'];
+        if (array_key_exists('serial_no', $data)) {
+            $updates['serial_no'] = $data['serial_no'];
         }
 
-
-        if (
-            array_key_exists(
-                'program',
-                $data
-            )
-        ) {
-
-            $updates['course'] =
-                $data['program'];
+        if (isset($data['first_name'])) {
+            $updates['first_name'] = $data['first_name'];
+        }
+        if (array_key_exists('middle_name', $data)) {
+            $updates['middle_name'] = $data['middle_name'];
+        }
+        if (isset($data['last_name'])) {
+            $updates['last_name'] = $data['last_name'];
         }
 
-
-        if (
-            array_key_exists(
-                'grade',
-                $data
-            )
-        ) {
-
-            $updates['grade'] =
-                $data['grade'];
+        if (isset($data['name']) && !isset($data['first_name'])) {
+            $parts = Student::parseName($data['name']);
+            $updates['first_name'] = $parts['first_name'];
+            $updates['last_name']  = $parts['last_name'];
         }
 
-
-        if (
-            array_key_exists(
-                'dob',
-                $data
-            )
-        ) {
-
-            $updates['date_of_birth'] =
-                $data['dob']
-                    ?: null;
+        if (array_key_exists('program', $data)) {
+            $updates['course'] = $data['program'];
+        }
+        if (array_key_exists('course', $data)) {
+            $updates['course'] = $data['course'];
+        }
+        if (array_key_exists('component', $data)) {
+            $updates['component'] = $data['component'];
+        }
+        if (array_key_exists('year_level', $data)) {
+            $updates['year_level'] = $data['year_level'];
+        }
+        if (array_key_exists('enrollment_status', $data)) {
+            $updates['enrollment_status'] = $data['enrollment_status'];
         }
 
-
-        if (
-            array_key_exists(
-                'birth_place',
-                $data
-            )
-        ) {
-
-            $updates['place_of_birth'] =
-                $data['birth_place'];
+        if (array_key_exists('grade', $data)) {
+            $updates['grade'] = $data['grade'];
         }
 
-
-        if (
-            array_key_exists(
-                'gender',
-                $data
-            )
-        ) {
-
-            $updates['sex'] =
-                $data['gender']
-                    ?: null;
+        if (array_key_exists('dob', $data)) {
+            $updates['date_of_birth'] = $data['dob'] ?: null;
         }
 
-
-        if (
-            array_key_exists(
-                'cell_no',
-                $data
-            )
-        ) {
-
-            $updates['contact_number'] =
-                $data['cell_no'];
+        if (array_key_exists('birth_place', $data)) {
+            $updates['place_of_birth'] = $data['birth_place'];
         }
 
-
-        if (
-            array_key_exists(
-                'email',
-                $data
-            )
-        ) {
-
-            $updates['email'] =
-                $data['email'];
+        if (array_key_exists('gender', $data)) {
+            $updates['sex'] = $data['gender'] ?: null;
         }
 
-
-        if (
-            array_key_exists(
-                'address',
-                $data
-            )
-        ) {
-
-            $updates['complete_address'] =
-                $data['address'];
+        if (array_key_exists('cell_no', $data)) {
+            $updates['contact_number'] = $data['cell_no'];
         }
 
+        if (array_key_exists('email', $data)) {
+            $updates['email'] = $data['email'];
+        }
 
-        $record->update(
-            $updates
-        );
+        if (array_key_exists('address', $data)) {
+            $updates['complete_address'] = $data['address'];
+        }
+
+        $record->update($updates);
 
 
         if (
@@ -437,6 +375,53 @@ class StudentController extends Controller
 
                 'string',
                 'max:255',
+            ],
+
+            'serial_no' => [
+                'nullable',
+                'string',
+                'max:64',
+            ],
+
+            'first_name' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'middle_name' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'last_name' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'course' => [
+                'nullable',
+                'string',
+                'max:100',
+            ],
+
+            'component' => [
+                'nullable',
+                'string',
+                'max:32',
+            ],
+
+            'year_level' => [
+                'nullable',
+                'integer',
+            ],
+
+            'enrollment_status' => [
+                'nullable',
+                'string',
+                'max:32',
             ],
 
             'section_code' => [
@@ -1775,32 +1760,10 @@ if (
 
 
 // ----------------------------------------------------
-// APPEND MIDDLE NAME TO FIRST NAME IF SEPARATE
+// KEEP FIRST NAME AND MIDDLE NAME SEPARATE
 // ----------------------------------------------------
 
-$databaseFirstName =
-trim(
-    implode(
-        ' ',
-        array_filter([
-            $cleanFirstName,
-            $cleanMiddleName,
-        ])
-    )
-);
-
-
-// ----------------------------------------------------
-// ENSURE FIRST NAME IS NOT NULL
-// ----------------------------------------------------
-
-if (
-$databaseFirstName === ''
-) {
-
-$databaseFirstName = null;
-}
-
+$databaseFirstName = $cleanFirstName ? trim($cleanFirstName) : null;
 
 $parsed = [
 
@@ -1811,7 +1774,7 @@ $parsed = [
     $databaseFirstName,
 
 'middle_name' =>
-    $cleanMiddleName,
+    $cleanMiddleName ? trim($cleanMiddleName) : null,
 ];
 
 
