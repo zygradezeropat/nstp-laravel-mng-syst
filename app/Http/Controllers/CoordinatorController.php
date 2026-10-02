@@ -790,6 +790,7 @@ class CoordinatorController extends Controller
         ));
     }
 
+    /*
     public function announcements(Request $request)
     {
         $query = Announcement::orderByDesc('is_pinned')
@@ -864,6 +865,7 @@ class CoordinatorController extends Controller
 
         return back()->with('success', "Announcement '{$title}' deleted successfully.");
     }
+    */
 
     public function storeActivity(Request $request)
     {

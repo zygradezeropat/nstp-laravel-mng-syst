@@ -54,10 +54,12 @@
     <div>
         <div class="px-3 pb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400/80">Updates</div>
         <div class="space-y-1">
+{{-- 
             <a href="{{ route('instructor.announcements') }}" class="w-full group flex items-center gap-3 px-3 py-2 rounded-lg text-left transition {{ request()->routeIs('instructor.announcements') ? 'bg-[#0d9472] text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-[#ebf5f0]' }}">
                 <x-icon name="send" class="w-[18px] h-[18px] transition {{ request()->routeIs('instructor.announcements') ? 'text-white' : 'text-slate-400 group-hover:text-[#0d9472]' }}" />
                 <span class="flex-1 text-sm font-medium">Announcements</span>
             </a>
+--}}
             <a href="{{ route('instructor.calendar') }}" class="w-full group flex items-center gap-3 px-3 py-2 rounded-lg text-left transition {{ request()->routeIs('instructor.calendar') ? 'bg-[#0d9472] text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-[#ebf5f0]' }}">
                 <x-icon name="calendar" class="w-[18px] h-[18px] transition {{ request()->routeIs('instructor.calendar') ? 'text-white' : 'text-slate-400 group-hover:text-[#0d9472]' }}" />
                 <span class="flex-1 text-sm font-medium">Calendar</span>

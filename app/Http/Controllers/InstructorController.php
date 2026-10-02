@@ -806,6 +806,7 @@ class InstructorController extends Controller
         return back()->with('success', "Accomplishment Report '{$title}' deleted successfully.");
     }
 
+    /*
     public function announcements(Request $request = null)
     {
         $request = $request ?? request();
@@ -825,6 +826,7 @@ class InstructorController extends Controller
 
         return view('instructor.announcements', compact('announcements'));
     }
+    */
 
     public function calendar(Request $request)
     {

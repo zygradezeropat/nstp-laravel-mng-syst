@@ -33,10 +33,12 @@
     <x-icon name="calendar" class="w-[18px] h-[18px] transition {{ request()->routeIs('coordinator.calendar') ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600' }}" />
     <span class="flex-1 text-sm {{ request()->routeIs('coordinator.calendar') ? '' : 'group-hover:font-medium' }}">Activity Calendar</span>
 </a>
+{{-- 
 <a href="{{ route('coordinator.announcements') }}" class="w-full group flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition {{ request()->routeIs('coordinator.announcements') ? 'bg-indigo-600 text-white' : 'hover:bg-black/5 text-slate-700' }}">
     <x-icon name="send" class="w-[18px] h-[18px] transition {{ request()->routeIs('coordinator.announcements') ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600' }}" />
     <span class="flex-1 text-sm {{ request()->routeIs('coordinator.announcements') ? '' : 'group-hover:font-medium' }}">Announcements</span>
 </a>
+--}}
 <a href="{{ route('coordinator.reports') }}" class="w-full group flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition {{ request()->routeIs('coordinator.reports') ? 'bg-indigo-600 text-white' : 'hover:bg-black/5 text-slate-700' }}">
     <x-icon name="filetext" class="w-[18px] h-[18px] transition {{ request()->routeIs('coordinator.reports') ? 'text-white' : 'text-slate-400 group-hover:text-indigo-600' }}" />
     <span class="flex-1 text-sm {{ request()->routeIs('coordinator.reports') ? '' : 'group-hover:font-medium' }}">Generate Report</span>
