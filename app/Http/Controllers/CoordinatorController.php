@@ -43,25 +43,42 @@ class CoordinatorController extends Controller
             (object)['key' => 'reports_pending', 'label' => 'Reports Pending', 'value' => (string)$reportsPending, 'delta' => '0', 'up' => false, 'ico' => 'filecheck', 'color' => 'from-amber-500 to-orange-500'],
         ];
 
-        // 5. Incomplete profiles count
-        $incompleteCount = Student::where(function($q) {
-            $q->whereNull('email')
-              ->orWhereNull('contact_number')
+        // 5. Incomplete profiles count & detailed records
+        $incompleteQuery = Student::where(function($q) {
+            $q->whereNull('email')->orWhere('email', '')
+              ->orWhereNull('contact_number')->orWhere('contact_number', '')
               ->orWhereNull('date_of_birth')
-              ->orWhereNull('complete_address');
-        })->count();
+              ->orWhereNull('complete_address')->orWhere('complete_address', '')
+              ->orWhereNull('place_of_birth')->orWhere('place_of_birth', '');
+        });
 
-        $incompleteProfiles = Student::where(function($q) {
-            $q->whereNull('email')
-              ->orWhereNull('contact_number')
-              ->orWhereNull('date_of_birth')
-              ->orWhereNull('complete_address');
-        })->limit(5)->get()->map(function($student) {
+        $incompleteCount = $incompleteQuery->count();
+
+        $incompleteProfiles = $incompleteQuery->orderBy('last_name')->take(10)->get()->map(function($student) {
+            $missing = [];
+            if (empty($student->email)) $missing[] = 'Email Address';
+            if (empty($student->contact_number)) $missing[] = 'Contact Number';
+            if (empty($student->date_of_birth)) $missing[] = 'Date of Birth';
+            if (empty($student->complete_address)) $missing[] = 'Residential Address';
+            if (empty($student->place_of_birth)) $missing[] = 'Place of Birth';
+            if (empty($student->sex)) $missing[] = 'Gender/Sex';
+
             return (object)[
-                'id' => $student->student_id,
-                'name' => trim($student->last_name . ', ' . $student->first_name, ', '),
-                'course' => $student->course ?? 'N/A',
-                'program' => $student->component ?? 'CWTS',
+                'db_id'          => $student->id,
+                'id'             => $student->student_id ?: ('STUDENT-' . $student->id),
+                'first_name'     => $student->first_name ?? '',
+                'middle_name'    => $student->middle_name ?? '',
+                'last_name'      => $student->last_name ?? '',
+                'name'           => trim(($student->last_name ?? '') . ', ' . ($student->first_name ?? ''), ', '),
+                'course'         => $student->course ?? 'N/A',
+                'program'        => $student->component ?? 'CWTS',
+                'email'          => $student->email ?? '',
+                'contact_number' => $student->contact_number ?? '',
+                'dob'            => $student->date_of_birth ? date('Y-m-d', strtotime($student->date_of_birth)) : '',
+                'birth_place'    => $student->place_of_birth ?? '',
+                'sex'            => $student->sex ?? 'Female',
+                'address'        => $student->complete_address ?? '',
+                'missing_fields' => $missing,
             ];
         });
 
@@ -149,20 +166,24 @@ class CoordinatorController extends Controller
         }
 
         $sectionsPaginated = $sectionsQuery->orderBy('section_name')->paginate(10)->withQueryString();
-        $mappedCollection = $sectionsPaginated->getCollection()->map(function ($s) {
-            $studentCount = \DB::table('students')
-                ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
-                ->join('sections as sec', 'sec.id', '=', 'enrollments.section_id')
-                ->where('sec.id', $s->id)
-                ->count();
+        $sectionIds = $sectionsPaginated->pluck('id')->toArray();
 
+        // Batch pre-fetch student counts per section in 1 query to prevent N+1 loop
+        $studentCounts = \DB::table('enrollments')
+            ->whereIn('section_id', $sectionIds)
+            ->groupBy('section_id')
+            ->select('section_id', \DB::raw('count(*) as count'))
+            ->pluck('count', 'section_id')
+            ->toArray();
+
+        $mappedCollection = $sectionsPaginated->getCollection()->map(function ($s) use ($studentCounts) {
             return (object)[
                 'id'           => $s->id,
                 'code'         => $s->section_name,
                 'program'      => $s->component,
                 'schoolYear'   => $s->school_year,
                 'semester'     => $s->semester,
-                'students'     => $studentCount,
+                'students'     => $studentCounts[$s->id] ?? 0,
                 'instructor'   => $s->instructor_name,
                 'room'         => $s->room,
             ];
