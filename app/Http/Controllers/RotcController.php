@@ -99,7 +99,32 @@ class RotcController extends Controller
 
         $reports = $plansList->concat($reportsList)->sortByDesc('updated_at')->take(4)->values()->toArray();
 
-        return view('rotc.dashboard', compact('stats', 'reports'));
+        // ROTC Cadet evaluation breakdown
+        $rotcPassed = Student::where('component', 'ROTC')->where('grade', 'pass')->count();
+        $rotcFailed = Student::where('component', 'ROTC')->where('grade', 'fail')->count();
+        $rotcPending = max(0, $totalCadets - ($rotcPassed + $rotcFailed));
+
+        // Platoon breakdown
+        $platoonsBreakdown = Section::where('component', 'ROTC')->withCount('students')->get();
+        $platLabels = $platoonsBreakdown->pluck('section_name')->toArray();
+        $platCounts = $platoonsBreakdown->pluck('students_count')->toArray();
+
+        $chartData = [
+            'cadet_grades' => [
+                'labels' => ['Passed', 'Failed', 'In-Training / Active'],
+                'data'   => [$rotcPassed, $rotcFailed, $rotcPending],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $totalCadets,
+            ],
+            'platoons' => [
+                'labels' => !empty($platLabels) ? $platLabels : ['No Active Platoons'],
+                'data'   => !empty($platCounts) ? $platCounts : [0],
+                'colors' => ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed'],
+                'total'  => $totalCadets,
+            ],
+        ];
+
+        return view('rotc.dashboard', compact('stats', 'reports', 'chartData'));
     }
 
     public function platoons()

@@ -253,7 +253,15 @@
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded-2xl border border-slate-100 shadow-xs">
                 <div>
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Target Section</label>
-                    <input id="reviewSectionInput" type="text" placeholder="e.g. CWTS-1A" class="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" />
+                    <div class="relative">
+                        <input id="reviewSectionInput" type="text" list="existingSectionsList" placeholder="Select or type existing section..." class="w-full px-3 py-2 text-sm font-semibold rounded-xl bg-slate-50 border border-slate-200 focus:border-indigo-400 focus:bg-white focus:outline-none transition" autocomplete="off" />
+                        <datalist id="existingSectionsList">
+                            @foreach($sections ?? [] as $sec)
+                                <option value="{{ $sec->section_name }}">{{ $sec->section_name }} ({{ $sec->component }})</option>
+                            @endforeach
+                        </datalist>
+                    </div>
+                    <div class="text-[10px] text-slate-400 mt-1">Select an existing section from Sections & Students module (sections will not be auto-created).</div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">Source File</label>
@@ -1279,13 +1287,20 @@
                     return;
                 }
 
+                // Check if target section exists in database
+                const existingSectionOptions = Array.from(document.querySelectorAll('#existingSectionsList option')).map(o => o.value.trim().toUpperCase());
+                if (existingSectionOptions.length > 0 && !existingSectionOptions.includes(targetSection.toUpperCase())) {
+                    alert(`The record is not on database. Section "${targetSection}" does not exist in the Sections & Students module. Please select an existing section.`);
+                    return;
+                }
+
                 // Show loading state and send AJAX request
                 const reviewModal = document.getElementById('ocrReviewModal');
                 if (reviewModal) reviewModal.classList.add('hidden');
                 
                 uploadState.classList.add('hidden');
                 loadingState.classList.remove('hidden');
-                updateProgress(75, 'Synchronizing Database...', 'Saving approved grades to DNSC portal database...');
+                updateProgress(75, 'Synchronizing Database...', 'Checking records against database and saving approved grades...');
 
                 const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
                 
@@ -1310,7 +1325,7 @@
                 })
                 .then(data => {
                     if (data.success) {
-                        updateProgress(100, 'Import & Sync Completed!', 'Approved grades recorded successfully.');
+                        updateProgress(100, 'Import & Sync Completed!', 'Approved grades processed successfully.');
                         
                         const now = new Date();
                         const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
@@ -1331,10 +1346,19 @@
                             displayResults(historyEntry);
                         }, 500);
 
-                        if (window.finishProgressModal) {
-                            window.finishProgressModal('OCR Sync Complete', `Successfully synced ${data.summary.total} student grades for section ${data.summary.section}.`, 'success');
-                        } else if (window.showToast) {
-                            window.showToast(`Successfully synced ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Sync Successful');
+                        if (data.summary.not_in_database > 0) {
+                            const noticeMsg = `Synced ${data.summary.matched} student grade(s) for section <strong>${data.summary.section}</strong>. ${data.summary.not_in_database} record(s) are not on database and were not uploaded.`;
+                            if (window.finishProgressModal) {
+                                window.finishProgressModal('OCR Sync Complete', noticeMsg, 'warning');
+                            } else if (window.showToast) {
+                                window.showToast(noticeMsg, 'warning', 'Sync Notice');
+                            }
+                        } else {
+                            if (window.finishProgressModal) {
+                                window.finishProgressModal('OCR Sync Complete', `Successfully synced ${data.summary.total} student grades for section ${data.summary.section}.`, 'success');
+                            } else if (window.showToast) {
+                                window.showToast(`Successfully synced ${data.summary.total} student grades for section <strong>${data.summary.section}</strong>.`, 'success', 'Sync Successful');
+                            }
                         }
                     } else {
                         throw new Error(data.message || 'Database sync failure.');
@@ -1467,18 +1491,25 @@
                 const tr = document.createElement('tr');
                 tr.className = 'border-b border-slate-50 hover:bg-slate-50/50 transition duration-150';
 
-                // 3-Color Remarks Badges: Green (Passed), Red (Failed), Amber (Pending)
+                // 3-Color Remarks Badges: Green (Passed), Red (Failed), Amber (Pending), Slate (Not Uploaded)
                 let remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">Pending</span>`;
-                if (std.remarks === 'Passed') {
+                if (std.in_database === false || std.remarks === 'Not on Database') {
+                    remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">Not Uploaded</span>`;
+                } else if (std.remarks === 'Passed') {
                     remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">Passed</span>`;
                 } else if (std.remarks === 'Failed' || std.remarks === 'Dropped') {
                     remarksBadge = `<span class="inline-flex items-center justify-center text-xs font-bold px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">Failed</span>`;
                 }
 
                 // Database Status Badge
-                let syncBadge = std.is_new
-                    ? `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-violet-200 bg-violet-50 text-violet-700">Newly Registered</span>`
-                    : `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">Matched</span>`;
+                let syncBadge = '';
+                if (std.in_database === false) {
+                    syncBadge = `<span class="inline-flex items-center justify-center text-[10px] font-bold px-2 py-0.5 rounded border border-rose-200 bg-rose-50 text-rose-700">Record is not on database</span>`;
+                } else if (std.is_new) {
+                    syncBadge = `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-violet-200 bg-violet-50 text-violet-700">Newly Registered</span>`;
+                } else {
+                    syncBadge = `<span class="inline-flex items-center justify-center text-[10px] font-semibold px-2 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700">Matched</span>`;
+                }
 
                 tr.innerHTML = `
                     <td class="py-3 px-4 text-center">

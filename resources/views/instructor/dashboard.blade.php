@@ -28,6 +28,31 @@
     @endforeach
 </div>
 
+<!-- Interactive Instructor Analytics & Pie Charts -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+    <x-card title="Student Grade Performance" subtitle="Pass, fail, and pending evaluation ratio for handled students">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+            <div class="relative w-44 h-44 sm:w-48 sm:h-48 shrink-0 flex items-center justify-center">
+                <canvas id="instructorGradeChart"></canvas>
+            </div>
+            <div id="instructorGradeLegend" class="flex-1 w-full space-y-1.5 min-w-[180px]">
+                <!-- Populated dynamically via JS -->
+            </div>
+        </div>
+    </x-card>
+
+    <x-card title="Assigned Sections Enrollment" subtitle="Student enrollment breakdown across your assigned sections">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+            <div class="relative w-44 h-44 sm:w-48 sm:h-48 shrink-0 flex items-center justify-center">
+                <canvas id="instructorSectionChart"></canvas>
+            </div>
+            <div id="instructorSectionLegend" class="flex-1 w-full space-y-1.5 min-w-[180px]">
+                <!-- Populated dynamically via JS -->
+            </div>
+        </div>
+    </x-card>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
     <!-- Reports & Plans Tracker -->
     <div class="lg:col-span-2">
@@ -127,5 +152,16 @@
         </x-card>
     </div>
 </div>
+
+@push('scripts')
+<script>
+    window.__INSTRUCTOR_CHART_DATA = @json($chartData ?? null);
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.initDashboardCharts === 'function') {
+            window.initDashboardCharts();
+        }
+    });
+</script>
+@endpush
 
 @endsection

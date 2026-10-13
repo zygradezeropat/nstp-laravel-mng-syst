@@ -64,6 +64,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/certificate-templates/{id}', [CoordinatorController::class, 'getTemplate'])->name('certificate_templates.get');
         Route::get('/archive', [CoordinatorController::class, 'archive'])->name('archive');
         Route::post('/archive/{id}/restore', [CoordinatorController::class, 'restoreStudent'])->name('archive.restore');
+        Route::delete('/archive/{id}', [CoordinatorController::class, 'forceDeleteStudent'])->name('archive.destroy');
         Route::get('/audit', [CoordinatorController::class, 'audit'])->name('audit');
         Route::get('/reports', [CoordinatorController::class, 'reports'])->name('reports');
         Route::match(['get', 'post'], '/reports/export-pdf', [CoordinatorController::class, 'exportReportPdf'])->name('reports.export_pdf');

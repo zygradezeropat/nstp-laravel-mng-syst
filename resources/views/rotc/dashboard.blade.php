@@ -31,6 +31,35 @@
     </div>
 </div>
 
+{{-- ── Cadet Analytics & Platoon Charts ── --}}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+    <div class="bg-white border border-slate-200 rounded-md p-5 shadow-xs">
+        <div class="text-slate-900 tracking-tight font-medium">Cadet Evaluation & Readiness Ratio</div>
+        <div class="text-xs text-slate-500 mt-0.5 mb-3">Overall standing and pass/fail evaluation of ROTC cadets</div>
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+            <div class="relative w-44 h-44 sm:w-48 sm:h-48 shrink-0 flex items-center justify-center">
+                <canvas id="rotcCadetChart"></canvas>
+            </div>
+            <div id="rotcCadetLegend" class="flex-1 w-full space-y-1.5 min-w-[180px]">
+                <!-- Populated dynamically via JS -->
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-white border border-slate-200 rounded-md p-5 shadow-xs">
+        <div class="text-slate-900 tracking-tight font-medium">Platoon Strength & Roster Distribution</div>
+        <div class="text-xs text-slate-500 mt-0.5 mb-3">Cadet deployment across active platoons and companies</div>
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+            <div class="relative w-44 h-44 sm:w-48 sm:h-48 shrink-0 flex items-center justify-center">
+                <canvas id="rotcPlatoonChart"></canvas>
+            </div>
+            <div id="rotcPlatoonLegend" class="flex-1 w-full space-y-1.5 min-w-[180px]">
+                <!-- Populated dynamically via JS -->
+            </div>
+        </div>
+    </div>
+</div>
+
 {{-- ── Main Content: Reports + Calendar ── --}}
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-6 mt-6">
 
@@ -139,5 +168,16 @@
     </div>
 
 </div>
+
+@push('scripts')
+<script>
+    window.__ROTC_CHART_DATA = @json($chartData ?? null);
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof window.initDashboardCharts === 'function') {
+            window.initDashboardCharts();
+        }
+    });
+</script>
+@endpush
 
 @endsection

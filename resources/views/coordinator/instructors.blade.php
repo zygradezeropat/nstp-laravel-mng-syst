@@ -50,6 +50,9 @@
                 <button onclick="openEditInstructorModal({{ json_encode($r) }})" class="text-slate-400 hover:text-indigo-600 p-1 transition cursor-pointer" title="Edit Instructor">
                     <x-icon name="pencil" class="w-4 h-4" />
                 </button>
+                <button type="button" onclick="openDeleteInstructorModal('{{ $r->id }}', '{{ addslashes($r->name) }}')" class="text-slate-400 hover:text-rose-600 p-1 transition cursor-pointer" title="Delete Instructor">
+                    <x-icon name="trash" class="w-4 h-4" />
+                </button>
             </td>
         </tr>
         @empty
@@ -64,7 +67,7 @@
 </x-card>
 
 <!-- New Instructor Modal -->
-<div id="newInstructorOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm {{ $errors->any() ? '' : 'hidden' }}">
+<div id="newInstructorOverlay" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm {{ (isset($errors) && $errors->any()) ? '' : 'hidden' }}">
     <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-lg mx-4">
         <form method="POST" action="{{ route('coordinator.instructors.store') }}" data-progress-title="Adding Instructor" data-progress-subtitle="Registering faculty account and setting up assignments...">
             @csrf
@@ -202,17 +205,99 @@
     </div>
 </div>
 
+<!-- Delete Instructor Confirmation Modal -->
+<div id="deleteInstructorOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 overflow-hidden transform transition-all duration-200" id="deleteInstructorModalContainer">
+        <form id="deleteInstructorForm" method="POST" action="" data-progress-title="Deleting Instructor" data-progress-subtitle="Removing faculty account...">
+            @csrf
+            @method('DELETE')
+            <div class="p-6 text-center">
+                <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-4">
+                    <x-icon name="trash" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-bold text-slate-800 mb-2">Delete Instructor</h3>
+                <p class="text-sm text-slate-500 mb-6">
+                    Are you sure you want to delete <span id="deleteInstructorName" class="font-bold text-slate-800"></span>? This will remove their faculty assignment.
+                </p>
+                <div class="flex items-center justify-center gap-3 pt-2">
+                    <button type="button" onclick="closeDeleteInstructorModal()" class="px-5 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-semibold text-sm hover:bg-slate-50 transition cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-rose-600 text-white font-semibold text-sm hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                        Delete Instructor
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+const allSectionsList = @json($allSections ?? []);
+let currentEditingInstructorId = null;
+
+function updateInstructorSectionOptions(currentDept, instructorId) {
+    const select = document.getElementById('edit_instructor_section');
+    if (!select) return;
+
+    select.innerHTML = '<option value="">— Select a section (optional) —</option>';
+
+    allSectionsList.forEach(sec => {
+        // Only sections within the instructor's assigned scope should be reflected there
+        const matchesScope = (currentDept === 'General' || !sec.component || sec.component.toUpperCase() === currentDept.toUpperCase());
+        if (!matchesScope) return;
+
+        const isAssignedToOther = (sec.instructor_id && sec.instructor_id != instructorId);
+        const opt = document.createElement('option');
+        opt.value = sec.section_name;
+        
+        if (isAssignedToOther) {
+            opt.disabled = true;
+            opt.textContent = `${sec.section_name} (${sec.component}) — Assigned to ${sec.instructor ? sec.instructor.name : 'Another Instructor'}`;
+        } else if (instructorId && sec.instructor_id == instructorId) {
+            opt.textContent = `${sec.section_name} (${sec.component}) — Currently Assigned`;
+        } else {
+            opt.textContent = `${sec.section_name} (${sec.component})`;
+        }
+
+        select.appendChild(opt);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const deptSelect = document.getElementById('edit_instructor_dept');
+    if (deptSelect) {
+        deptSelect.addEventListener('change', function() {
+            updateInstructorSectionOptions(this.value, currentEditingInstructorId);
+        });
+    }
+});
+
 function openEditInstructorModal(instructor) {
     const form = document.getElementById('editInstructorForm');
     form.action = `/coordinator/instructors/${instructor.id}`;
 
+    currentEditingInstructorId = instructor.id;
     document.getElementById('edit_instructor_name').value = instructor.name;
     document.getElementById('edit_instructor_dept').value = instructor.dept || 'CWTS';
     document.getElementById('edit_instructor_status').value = instructor.status || 'Active';
-    document.getElementById('edit_instructor_section').value = '';
+
+    updateInstructorSectionOptions(instructor.dept || 'CWTS', instructor.id);
 
     document.getElementById('editInstructorOverlay').classList.remove('hidden');
+}
+
+function openDeleteInstructorModal(id, name) {
+    const form = document.getElementById('deleteInstructorForm');
+    form.action = `/coordinator/instructors/${id}`;
+    document.getElementById('deleteInstructorName').textContent = name;
+    document.getElementById('deleteInstructorOverlay').classList.remove('hidden');
+    document.getElementById('deleteInstructorOverlay').classList.add('flex');
+}
+
+function closeDeleteInstructorModal() {
+    document.getElementById('deleteInstructorOverlay').classList.add('hidden');
+    document.getElementById('deleteInstructorOverlay').classList.remove('flex');
 }
 </script>
 

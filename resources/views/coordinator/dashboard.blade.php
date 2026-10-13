@@ -33,15 +33,36 @@
 
 <div class="grid grid-cols-1 xl:grid-cols-5 gap-6 mt-6">
     <div class="xl:col-span-3 flex flex-col gap-5">
-        <!-- Charts go here, can be hydrated via Alpine or JS -->
-        <x-card class="h-80" title="Enrollment Trends" subtitle="Overview of student enrollment over time">
-            <div class="w-full h-full flex items-center justify-center text-slate-400">
-                (Chart Placeholder - Requires JS Library)
+        <!-- Interactive Pie / Doughnut Charts -->
+        <x-card title="Enrollment Distribution" subtitle="Overview of student enrollment by component and program">
+            <x-slot name="actions">
+                <div class="inline-flex p-0.5 rounded-lg bg-slate-100 text-xs font-medium border border-slate-200/60">
+                    <button type="button" id="enrollmentToggleComponents" class="px-2.5 py-1 rounded-md bg-white text-slate-800 shadow-xs font-semibold cursor-pointer transition">
+                        Components
+                    </button>
+                    <button type="button" id="enrollmentTogglePrograms" class="px-2.5 py-1 rounded-md text-slate-500 hover:text-slate-800 font-medium cursor-pointer transition">
+                        Top Courses
+                    </button>
+                </div>
+            </x-slot>
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+                <div class="relative w-48 h-48 sm:w-52 sm:h-52 shrink-0 flex items-center justify-center">
+                    <canvas id="coordinatorEnrollmentChart"></canvas>
+                </div>
+                <div id="coordinatorEnrollmentLegend" class="flex-1 w-full space-y-1.5 min-w-[200px]">
+                    <!-- Populated dynamically via JS -->
+                </div>
             </div>
         </x-card>
-        <x-card class="h-80" title="Pass / Fail Ratio" subtitle="Success metrics across sections">
-            <div class="w-full h-full flex items-center justify-center text-slate-400">
-                (Chart Placeholder - Requires JS Library)
+
+        <x-card title="Pass / Fail Ratio" subtitle="Success metrics and evaluation standing across all students">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-5 py-2">
+                <div class="relative w-48 h-48 sm:w-52 sm:h-52 shrink-0 flex items-center justify-center">
+                    <canvas id="coordinatorPassFailChart"></canvas>
+                </div>
+                <div id="coordinatorPassFailLegend" class="flex-1 w-full space-y-1.5 min-w-[200px]">
+                    <!-- Populated dynamically via JS -->
+                </div>
             </div>
         </x-card>
     </div>
@@ -493,6 +514,12 @@
                     saveBtn.innerHTML = origBtnContent;
                 });
             });
+        }
+
+        // Initialize Coordinator Dashboard Charts
+        window.__COORDINATOR_CHART_DATA = @json($chartData ?? null);
+        if (typeof window.initDashboardCharts === 'function') {
+            window.initDashboardCharts();
         }
     });
 </script>

@@ -12,7 +12,7 @@ class DashboardMetricsService
     {
         return match ($role) {
             'instructor'    => $this->instructorMetrics(),
-            'rotcofficer'   => $this->rotcMetrics(),
+            'rotc', 'rotcofficer' => $this->rotcMetrics(),
             'admin'         => $this->adminMetrics(),
             default         => $this->coordinatorMetrics(),
         };
@@ -34,6 +34,45 @@ class DashboardMetricsService
         $studentDelta = $this->formatDelta($totalStudents, $prevTotal);
         $passDelta = $this->formatDelta($passRate, max(0, $passRate - 1.8), '%', true);
 
+        // Pie / Donut Chart Data
+        $cwts = $this->countStudents('CWTS');
+        $lts = $this->countStudents('LTS');
+        $rotc = $this->countStudents('ROTC');
+
+        $passed = (int) DB::table('students')->where('grade', 'pass')->count();
+        $failed = (int) DB::table('students')->where('grade', 'fail')->count();
+        $pending = max(0, $totalStudents - ($passed + $failed));
+
+        $topCourses = DB::table('students')
+            ->select('course', DB::raw('count(*) as total'))
+            ->whereNotNull('course')
+            ->where('course', '<>', '')
+            ->groupBy('course')
+            ->orderByDesc('total')
+            ->limit(6)
+            ->get();
+
+        $chartData = [
+            'components' => [
+                'labels' => ['CWTS', 'LTS', 'ROTC'],
+                'data'   => [$cwts, $lts, $rotc],
+                'colors' => ['#4f46e5', '#10b981', '#f43f5e'],
+                'total'  => $totalStudents,
+            ],
+            'grades' => [
+                'labels' => ['Passed', 'Failed', 'Pending / In Progress'],
+                'data'   => [$passed, $failed, $pending],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $totalStudents,
+                'pass_rate' => $passRate,
+            ],
+            'courses' => [
+                'labels' => $topCourses->pluck('course')->toArray(),
+                'data'   => $topCourses->pluck('total')->toArray(),
+                'colors' => ['#4f46e5', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'],
+            ],
+        ];
+
         return [
             'role'    => 'coordinator',
             'version' => DashboardMetricsVersion::current(),
@@ -54,6 +93,7 @@ class DashboardMetricsService
             'activities'           => $activities,
             'recent_activities'    => $recentActivities,
             'approvals_pending'    => $reportsPending,
+            'chart_data'           => $chartData,
         ];
     }
 
@@ -63,6 +103,43 @@ class DashboardMetricsService
         $sections = $this->countSections();
         $reportsPending = $this->countPendingReports();
         $approved = $this->countApprovedReports();
+
+        $instructorId = auth()->id();
+        $instructorStudentIds = DB::table('students')
+            ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
+            ->join('sections', 'enrollments.section_id', '=', 'sections.id')
+            ->where('sections.instructor_id', $instructorId)
+            ->pluck('students.id');
+
+        $instTotal = $instructorStudentIds->count();
+        $instPassed = (int) DB::table('students')->whereIn('id', $instructorStudentIds)->where('grade', 'pass')->count();
+        $instFailed = (int) DB::table('students')->whereIn('id', $instructorStudentIds)->where('grade', 'fail')->count();
+        $instPending = max(0, $instTotal - ($instPassed + $instFailed));
+
+        $sectionsBreakdown = DB::table('sections')
+            ->where('instructor_id', $instructorId)
+            ->leftJoin('enrollments', 'sections.id', '=', 'enrollments.section_id')
+            ->select('sections.section_name', DB::raw('count(enrollments.id) as total'))
+            ->groupBy('sections.id', 'sections.section_name')
+            ->get();
+
+        $secLabels = $sectionsBreakdown->pluck('section_name')->toArray();
+        $secCounts = $sectionsBreakdown->pluck('total')->toArray();
+
+        $instChartData = [
+            'grades' => [
+                'labels' => ['Passed', 'Failed', 'Pending Grading'],
+                'data'   => [$instPassed, $instFailed, $instPending],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $instTotal,
+            ],
+            'sections' => [
+                'labels' => !empty($secLabels) ? $secLabels : ['No Assigned Section'],
+                'data'   => !empty($secCounts) ? $secCounts : [0],
+                'colors' => ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'],
+                'total'  => $instTotal,
+            ],
+        ];
 
         return [
             'role'    => 'instructor',
@@ -75,6 +152,7 @@ class DashboardMetricsService
             ],
             'activities'        => $this->calendarActivities(),
             'recent_activities' => $this->recentActivityFeed(6),
+            'chart_data'        => $instChartData,
         ];
     }
 
@@ -86,11 +164,50 @@ class DashboardMetricsService
 
         $approved = 0;
         if (Schema::hasTable('activity_plans')) {
-            $approved += (int) DB::table('activity_plans')->where('status', 'Approved')->where('component', 'ROTC')->count();
+            $approved += (int) DB::table('activity_plans')
+                ->where('status', 'Approved')
+                ->where(function ($query) {
+                    $query->whereExists(function ($q) {
+                        $q->select(DB::raw(1))
+                            ->from('sections')
+                            ->whereColumn('sections.id', 'activity_plans.section_id')
+                            ->where('sections.component', 'ROTC');
+                    })->orWhereNull('section_id');
+                })
+                ->count();
         }
         if (Schema::hasTable('accomplishment_reports')) {
             $approved += (int) DB::table('accomplishment_reports')->whereIn('status', ['Reviewed', 'Approved'])->count();
         }
+
+        $rotcPassed = (int) DB::table('students')->where('component', 'ROTC')->where('grade', 'pass')->count();
+        $rotcFailed = (int) DB::table('students')->where('component', 'ROTC')->where('grade', 'fail')->count();
+        $rotcPending = max(0, $cadets - ($rotcPassed + $rotcFailed));
+
+        $platoonsBreakdown = DB::table('sections')
+            ->where('component', 'ROTC')
+            ->leftJoin('enrollments', 'sections.id', '=', 'enrollments.section_id')
+            ->select('sections.section_name', DB::raw('count(enrollments.id) as total'))
+            ->groupBy('sections.id', 'sections.section_name')
+            ->get();
+
+        $platLabels = $platoonsBreakdown->pluck('section_name')->toArray();
+        $platCounts = $platoonsBreakdown->pluck('total')->toArray();
+
+        $rotcChartData = [
+            'cadet_grades' => [
+                'labels' => ['Passed', 'Failed', 'In-Training / Active'],
+                'data'   => [$rotcPassed, $rotcFailed, $rotcPending],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $cadets,
+            ],
+            'platoons' => [
+                'labels' => !empty($platLabels) ? $platLabels : ['No Active Platoons'],
+                'data'   => !empty($platCounts) ? $platCounts : [0],
+                'colors' => ['#4f46e5', '#059669', '#d97706', '#dc2626', '#7c3aed'],
+                'total'  => $cadets,
+            ],
+        ];
 
         return [
             'role'    => 'rotcofficer',
@@ -103,6 +220,7 @@ class DashboardMetricsService
             ],
             'activities'        => $this->calendarActivities('ROTC'),
             'recent_activities' => $this->recentActivityFeed(5),
+            'chart_data'        => $rotcChartData,
         ];
     }
 

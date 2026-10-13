@@ -87,7 +87,45 @@ class CoordinatorController extends Controller
             ->limit(5)
             ->get();
 
-        return view('coordinator.dashboard', compact('stats', 'incompleteCount', 'incompleteProfiles', 'recentActivities'));
+        // 7. Pie / Doughnut Chart Data
+        $cwtsCount = Student::where('component', 'CWTS')->count();
+        $ltsCount = Student::where('component', 'LTS')->count();
+        $rotcCount = Student::where('component', 'ROTC')->count();
+
+        $passedCount = Student::where('grade', 'pass')->count();
+        $failedCount = Student::where('grade', 'fail')->count();
+        $pendingCount = max(0, $totalStudents - ($passedCount + $failedCount));
+
+        $topCourses = Student::select('course', \DB::raw('count(*) as total'))
+            ->whereNotNull('course')
+            ->where('course', '<>', '')
+            ->groupBy('course')
+            ->orderByDesc('total')
+            ->limit(6)
+            ->get();
+
+        $chartData = [
+            'components' => [
+                'labels' => ['CWTS', 'LTS', 'ROTC'],
+                'data'   => [$cwtsCount, $ltsCount, $rotcCount],
+                'colors' => ['#4f46e5', '#10b981', '#f43f5e'],
+                'total'  => $totalStudents,
+            ],
+            'grades' => [
+                'labels' => ['Passed', 'Failed', 'Pending / In Progress'],
+                'data'   => [$passedCount, $failedCount, $pendingCount],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $totalStudents,
+                'pass_rate' => $passRate,
+            ],
+            'courses' => [
+                'labels' => $topCourses->pluck('course')->toArray(),
+                'data'   => $topCourses->pluck('total')->toArray(),
+                'colors' => ['#4f46e5', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ec4899'],
+            ],
+        ];
+
+        return view('coordinator.dashboard', compact('stats', 'incompleteCount', 'incompleteProfiles', 'recentActivities', 'chartData'));
     }
 
     public function sections(Request $request)
@@ -299,8 +337,8 @@ class CoordinatorController extends Controller
             ->orderBy('name')
             ->get();
 
-        // Fetch all active sections in the system
-        $allSections = Section::orderBy('section_name')->get();
+        // Fetch all active sections in the system with their assigned instructor
+        $allSections = Section::with('instructor')->orderBy('section_name')->get();
 
         return view('coordinator.instructors', compact('instructors', 'registeredUsers', 'allSections'));
     }
@@ -929,10 +967,14 @@ class CoordinatorController extends Controller
 
     public function archive()
     {
-        $trashedStudents = Student::onlyTrashed()->orderBy('deleted_at', 'desc')->get();
-        if ($trashedStudents->isEmpty()) {
-            $trashedStudents = Student::withTrashed()->orderBy('created_at', 'desc')->get();
-        }
+        $trashedStudents = Student::withTrashed()
+            ->where(function ($q) {
+                $q->whereNotNull('deleted_at')
+                  ->orWhere('enrollment_status', 'Archived');
+            })
+            ->orderBy('deleted_at', 'desc')
+            ->orderBy('updated_at', 'desc')
+            ->get();
 
         $students = $trashedStudents->map(function($student) {
             $studentId = !empty($student->student_id) ? $student->student_id : 'N/A';
@@ -989,7 +1031,13 @@ class CoordinatorController extends Controller
     public function restoreStudent($id)
     {
         $student = Student::withTrashed()->findOrFail($id);
-        $student->restore();
+        if ($student->trashed()) {
+            $student->restore();
+        }
+        $student->update([
+            'enrollment_status' => 'Active',
+            'deleted_at'        => null,
+        ]);
 
         // Record Audit Log
         $user = auth()->user();
@@ -997,7 +1045,7 @@ class CoordinatorController extends Controller
             'Restored Student',
             'Students',
             $student->student_id ?: $student->id,
-            "Restored student {$student->last_name}, {$student->first_name} from Student Archive",
+            "Restored student {$student->last_name}, {$student->first_name} back to Masterlist from Student Archive",
             'edit',
             [
                 'username' => $user ? $user->name : 'NSTP Coordinator',
@@ -1006,12 +1054,47 @@ class CoordinatorController extends Controller
             ]
         );
 
-        return back()->with('success', "Student {$student->first_name} {$student->last_name} restored successfully.");
+        return back()->with('success', "Student {$student->first_name} {$student->last_name} has been restored back to the Masterlist.");
+    }
+
+    public function forceDeleteStudent($id)
+    {
+        $student = Student::withTrashed()->findOrFail($id);
+        $fullName = trim(($student->last_name ?? '') . ', ' . ($student->first_name ?? ''), ', ') ?: 'Student';
+        $studentId = $student->student_id ?: $student->id;
+
+        // Permanently delete associated records from database
+        \DB::table('enrollments')->where('student_id', $student->id)->delete();
+        \DB::table('attendance')->where('student_id', $student->id)->delete();
+        if (!empty($student->student_id)) {
+            \DB::table('class_list_students')->where('student_id', $student->student_id)->delete();
+        }
+
+        // Permanently delete student record ("forever gone")
+        $student->forceDelete();
+
+        // Record Audit Log
+        $user = auth()->user();
+        AuditLog::record(
+            'Permanently Deleted Student',
+            'Students',
+            $studentId,
+            "Permanently deleted student record for {$fullName} (forever gone)",
+            'delete',
+            [
+                'username' => $user ? $user->name : 'NSTP Coordinator',
+                'email'    => $user ? $user->email : 'coordinator@dnsc.edu.ph',
+                'role'     => 'coordinator',
+            ]
+        );
+
+        return back()->with('success', "Student {$fullName} has been permanently deleted from the database.");
     }
 
     public function ocr()
     {
-        return view('coordinator.ocr');
+        $sections = Section::orderBy('section_name')->get();
+        return view('coordinator.ocr', compact('sections'));
     }
 
     private function autoSeedTemplates()
@@ -1846,223 +1929,334 @@ class CoordinatorController extends Controller
             'students' => 'required|array',
         ]);
 
-        $sectionName = $data['section'];
+        $sectionName = trim($data['section']);
         $filename = $data['filename'];
         $studentsList = $data['students'];
 
-        $totalCount = count($studentsList);
-        $matchedCount = 0;
-        $createdCount = 0;
+        // 1. Validate that the Section exists in database (1 single query)
+        $section = Section::where('section_name', $sectionName)
+            ->orWhereRaw('LOWER(TRIM(section_name)) = ?', [strtolower($sectionName)])
+            ->first();
+
+        if (!$section) {
+            return response()->json([
+                'success' => false,
+                'message' => "The record is not on database. Section '{$sectionName}' does not exist in the Sections & Students module.",
+            ], 422);
+        }
+
+        $component = $section->component;
+
+        // 2. Pre-parse rows and collect search identifiers in memory (0 DB queries)
+        $parsedRows = [];
+        $studentNos = [];
+        $lastNames = [];
+        $serialNos = [];
+
+        foreach ($studentsList as $index => $row) {
+            $rawName = trim($row['name'] ?? '');
+            if (empty($rawName)) {
+                continue;
+            }
+
+            $rawGrade = $row['grade'] ?? null;
+            $rawRemarks = trim((string)($row['remarks'] ?? ''));
+            $studentNo = !empty($row['student_no']) ? trim($row['student_no']) : null;
+            $serialNo = !empty($row['serial_no']) ? trim($row['serial_no']) : null;
+
+            $parsedName = Student::parseName($rawName);
+            $firstName = $parsedName['first_name'];
+            $lastName = $parsedName['last_name'];
+
+            if ($studentNo) {
+                $studentNos[] = $studentNo;
+            }
+            if ($lastName) {
+                $lastNames[] = $lastName;
+            }
+            if ($serialNo) {
+                $serialNos[] = $serialNo;
+            }
+
+            // Standardize remarks from raw remarks or raw grade
+            $remarks = 'N/A';
+            $cleanRemarks = strtolower($rawRemarks);
+            if (in_array($cleanRemarks, ['passed', 'pass', 'p']) || str_starts_with($cleanRemarks, 'pass')) {
+                $remarks = 'Passed';
+            } elseif (in_array($cleanRemarks, ['failed', 'fail', 'f']) || str_starts_with($cleanRemarks, 'fail')) {
+                $remarks = 'Failed';
+            } elseif (in_array($cleanRemarks, ['pending', 'active']) || str_starts_with($cleanRemarks, 'pend')) {
+                $remarks = 'Pending';
+            }
+
+            if ($remarks === 'N/A' && $rawGrade !== null) {
+                if (is_numeric($rawGrade)) {
+                    $g = floatval($rawGrade);
+                    if ($g >= 1.0 && $g <= 3.0) {
+                        $remarks = 'Passed';
+                    } elseif ($g > 3.0 && $g <= 5.0) {
+                        $remarks = 'Failed';
+                    } elseif ($g >= 75.0 && $g <= 100.0) {
+                        $remarks = 'Passed';
+                    } elseif ($g >= 50.0 && $g < 75.0) {
+                        $remarks = 'Failed';
+                    }
+                } else {
+                    $cleanGrade = strtolower(trim((string)$rawGrade));
+                    if (in_array($cleanGrade, ['pass', 'passed', 'pass/fail', 'p']) || str_starts_with($cleanGrade, 'pass')) {
+                        $remarks = 'Passed';
+                    } elseif (in_array($cleanGrade, ['fail', 'failed', 'f']) || str_starts_with($cleanGrade, 'fail')) {
+                        $remarks = 'Failed';
+                    }
+                }
+            }
+
+            $gradeNum = is_numeric($rawGrade) ? floatval($rawGrade) : null;
+            $gradeEnum = $remarks === 'Passed' ? 'pass' : ($remarks === 'Failed' ? 'fail' : null);
+            $enrollmentStatus = $remarks === 'Passed' ? 'Passed' : ($remarks === 'Failed' ? 'Failed' : 'Pending');
+
+            $parsedRows[] = [
+                'index'             => $index,
+                'raw_name'          => $rawName,
+                'first_name'        => $firstName,
+                'last_name'         => $lastName,
+                'student_no'        => $studentNo,
+                'serial_no'         => $serialNo,
+                'raw_grade'         => $rawGrade,
+                'grade_num'         => $gradeNum,
+                'grade_enum'        => $gradeEnum,
+                'remarks'           => $remarks,
+                'enrollment_status' => $enrollmentStatus,
+            ];
+        }
+
+        if (empty($parsedRows)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No valid student rows found in the submitted data.',
+            ], 422);
+        }
+
+        // 3. Batch query candidate students in a SINGLE query (avoids N+1 query loop)
+        $uniqueStudentNos = array_values(array_unique(array_filter($studentNos)));
+        $uniqueLastNames = array_values(array_unique(array_filter($lastNames)));
+
+        $candidateStudents = Student::where(function($q) use ($uniqueStudentNos, $uniqueLastNames, $section) {
+            $hasFilter = false;
+            if (!empty($uniqueStudentNos)) {
+                $q->whereIn('student_id', $uniqueStudentNos);
+                $hasFilter = true;
+            }
+            if (!empty($uniqueLastNames)) {
+                if ($hasFilter) {
+                    $q->orWhereIn('last_name', $uniqueLastNames);
+                } else {
+                    $q->whereIn('last_name', $uniqueLastNames);
+                    $hasFilter = true;
+                }
+            }
+            // Include students already enrolled in this section
+            $enrollmentSub = function($sub) use ($section) {
+                $sub->select('student_id')->from('enrollments')->where('section_id', $section->id);
+            };
+            if ($hasFilter) {
+                $q->orWhereIn('id', $enrollmentSub);
+            } else {
+                $q->whereIn('id', $enrollmentSub);
+            }
+        })->get();
+
+        // 4. Index candidate students in memory for O(1) matching
+        $normalize = function($str) {
+            return strtolower(preg_replace('/[^a-z0-9]/i', '', (string)$str));
+        };
+
+        $byStudentNo = [];
+        $byLastFirst = [];
+        $byFullName = [];
+
+        foreach ($candidateStudents as $st) {
+            if (!empty($st->student_id)) {
+                $byStudentNo[trim($st->student_id)] = $st;
+            }
+            if (!empty($st->last_name) && !empty($st->first_name)) {
+                $byLastFirst[$normalize($st->last_name) . '|' . $normalize($st->first_name)] = $st;
+            }
+            $fn1 = $normalize(($st->last_name ?? '') . ' ' . ($st->first_name ?? ''));
+            $fn2 = $normalize(($st->first_name ?? '') . ' ' . ($st->last_name ?? ''));
+            if ($fn1) $byFullName[$fn1] = $st;
+            if ($fn2) $byFullName[$fn2] = $st;
+        }
+
+        // 5. Batch query section enrollments in a SINGLE query
+        $candidateIds = $candidateStudents->pluck('id')->all();
+        $existingEnrollments = \DB::table('enrollments')
+            ->where('section_id', $section->id)
+            ->whereIn('student_id', $candidateIds)
+            ->get()
+            ->keyBy('student_id');
+
+        // 6. Batch query serial numbers in a SINGLE query (if any)
+        $uniqueSerialNos = array_values(array_unique(array_filter($serialNos)));
+        $existingSerials = !empty($uniqueSerialNos)
+            ? \DB::table('enrollments')->whereIn('serial_number', $uniqueSerialNos)->get()->keyBy('serial_number')
+            : collect();
+
+        // 7. Match rows in memory without any per-row DB queries
+        $matchedRows = [];
+        $unmatchedRows = [];
+        $results = [];
+
         $passedCount = 0;
         $failedCount = 0;
 
-        $results = [];
+        foreach ($parsedRows as $row) {
+            $student = null;
 
-        \DB::beginTransaction();
-
-        try {
-            // 1. Find or resolve Section
-            $section = Section::where('section_name', $sectionName)->first();
-            if (!$section) {
-                $component = 'CWTS';
-                $scUpper = strtoupper($sectionName);
-                if (str_contains($scUpper, 'ROTC')) {
-                    $component = 'ROTC';
-                } elseif (str_contains($scUpper, 'LTS')) {
-                    $component = 'LTS';
-                }
-
-                $section = Section::create([
-                    'section_name' => $sectionName,
-                    'component'    => $component,
-                    'school_year'  => '2025-2026',
-                    'semester'     => '1st Semester',
-                    'status'       => 'Active',
-                ]);
+            // Priority 1: Match by student_no
+            if (!empty($row['student_no']) && isset($byStudentNo[$row['student_no']])) {
+                $student = $byStudentNo[$row['student_no']];
             }
 
-            // 2. Process each student row
-            foreach ($studentsList as $row) {
-                $rawName = trim($row['name'] ?? '');
-                if (empty($rawName)) {
-                    continue;
+            // Priority 2: Match by last_name and first_name
+            if (!$student && !empty($row['last_name']) && !empty($row['first_name'])) {
+                $key = $normalize($row['last_name']) . '|' . $normalize($row['first_name']);
+                if (isset($byLastFirst[$key])) {
+                    $student = $byLastFirst[$key];
                 }
+            }
 
-                $rawGrade = $row['grade'] ?? null;
-                $rawRemarks = trim((string)($row['remarks'] ?? ''));
-                $remarks = 'N/A';
-                $cleanRemarks = strtolower($rawRemarks);
-                if (in_array($cleanRemarks, ['passed', 'pass', 'p']) || str_starts_with($cleanRemarks, 'pass')) {
-                    $remarks = 'Passed';
-                } elseif (in_array($cleanRemarks, ['failed', 'fail', 'f']) || str_starts_with($cleanRemarks, 'fail')) {
-                    $remarks = 'Failed';
-                } elseif (in_array($cleanRemarks, ['pending', 'active']) || str_starts_with($cleanRemarks, 'pend')) {
-                    $remarks = 'Pending';
+            // Priority 3: Match by normalized full name
+            if (!$student && !empty($row['raw_name'])) {
+                $normRaw = $normalize($row['raw_name']);
+                if (isset($byFullName[$normRaw])) {
+                    $student = $byFullName[$normRaw];
                 }
+            }
 
-                $studentNo = $row['student_no'] ?? null;
-                $serialNo = $row['serial_no'] ?? null;
-
-                // Match existing student
-                // Parse first/last name
-                $parsedName = Student::parseName($rawName);
-                $firstName = $parsedName['first_name'];
-                $lastName = $parsedName['last_name'];
-
-                $student = null;
-                if ($studentNo) {
-                    $student = Student::where('student_id', $studentNo)->first();
-                }
-                if (!$student) {
-                    // Match by first & last name (case-insensitive)
-                    $student = Student::where('last_name', 'like', $lastName)
-                        ->where('first_name', 'like', $firstName)
-                        ->first();
-                }
-
-                // Standardize remarks from raw grade if remarks is N/A or empty
-                if ($remarks === 'N/A' && $rawGrade !== null) {
-                    if (is_numeric($rawGrade)) {
-                        $g = floatval($rawGrade);
-                        if ($g >= 1.0 && $g <= 3.0) {
-                            $remarks = 'Passed';
-                        } elseif ($g > 3.0 && $g <= 5.0) {
-                            $remarks = 'Failed';
-                        } elseif ($g >= 75.0 && $g <= 100.0) {
-                            $remarks = 'Passed';
-                        } elseif ($g >= 50.0 && $g < 75.0) {
-                            $remarks = 'Failed';
-                        }
-                    } else {
-                        $cleanGrade = strtolower(trim((string)$rawGrade));
-                        if (in_array($cleanGrade, ['pass', 'passed', 'pass/fail', 'p']) || str_starts_with($cleanGrade, 'pass')) {
-                            $remarks = 'Passed';
-                        } elseif (in_array($cleanGrade, ['fail', 'failed', 'f']) || str_starts_with($cleanGrade, 'fail')) {
-                            $remarks = 'Failed';
-                        }
-                    }
-                }
-
-                // If remarks is still N/A, try to default to existing student grade / enrollment status
-                if ($remarks === 'N/A' && $student) {
-                    $existingEnrollment = \DB::table('enrollments')
-                        ->where('student_id', $student->id)
-                        ->where('section_id', $section->id)
-                        ->first();
-
-                    if ($existingEnrollment && in_array($existingEnrollment->status, ['Passed', 'Failed'])) {
-                        $remarks = $existingEnrollment->status;
-                    } elseif ($student->grade !== null) {
-                        $remarks = $student->grade === 'pass' ? 'Passed' : 'Failed';
-                    }
-                }
-
-                $gradeEnum = $remarks === 'Passed' ? 'pass' : ($remarks === 'Failed' ? 'fail' : null);
-                $enrollmentStatus = $remarks === 'Passed' ? 'Passed' : ($remarks === 'Failed' ? 'Failed' : 'Pending');
-
-                if ($remarks === 'Passed') {
+            if ($student) {
+                // Record is ON DATABASE
+                if ($row['remarks'] === 'Passed') {
                     $passedCount++;
-                } elseif ($remarks === 'Failed') {
+                } elseif ($row['remarks'] === 'Failed') {
                     $failedCount++;
                 }
 
-                $isNew = false;
-                if ($student) {
-                    $matchedCount++;
-                    // Update student grade status and numerical grade
-                    $student->update([
-                        'grade' => $gradeEnum ?: $student->grade,
-                        'numerical_grade' => is_numeric($rawGrade) ? floatval($rawGrade) : $student->numerical_grade,
-                    ]);
-                } else {
-                    $createdCount++;
-                    $isNew = true;
-                    // Auto-generate student ID
-                    $newId = $studentNo;
-                    if (!$newId) {
-                        do {
-                            $newId = '2024-' . rand(10000, 99999);
-                        } while (Student::where('student_id', $newId)->exists());
-                    }
-
-                    $student = Student::create([
-                        'student_id'         => $newId,
-                        'first_name'         => $firstName,
-                        'last_name'          => $lastName,
-                        'course'             => 'BSIT',
-                        'component'          => $section->component,
-                        'enrollment_status'  => 'Active',
-                        'grade'              => $gradeEnum,
-                        'numerical_grade'    => is_numeric($rawGrade) ? floatval($rawGrade) : null,
-                        'created_at'         => now(),
-                    ]);
-                }
-
-                // 3. Sync enrollment with numeric grade and status
-                $gradeNum = is_numeric($rawGrade) ? floatval($rawGrade) : ($student ? (\DB::table('enrollments')->where('student_id', $student->id)->where('section_id', $section->id)->value('final_grade') ?? $student->numerical_grade) : null);
-
-                $existingEnrollment = \DB::table('enrollments')
-                    ->where('student_id', $student->id)
-                    ->where('section_id', $section->id)
-                    ->first();
-
-                // Resolve serial number conflict to prevent SQL 1062 unique key violation
-                $finalSerial = $serialNo;
-                if (!empty($finalSerial)) {
-                    $serialOwner = \DB::table('enrollments')
-                        ->where('serial_number', $finalSerial)
-                        ->when($existingEnrollment, function($q) use ($existingEnrollment) {
-                            return $q->where('id', '!=', $existingEnrollment->id);
-                        })
-                        ->first();
-
-                    if ($serialOwner) {
-                        if ($serialOwner->student_id == $student->id) {
-                            \DB::table('enrollments')->where('id', $serialOwner->id)->update(['serial_number' => null]);
-                        } else {
-                            $finalSerial = null;
-                        }
-                    }
-                }
-
-                if ($existingEnrollment) {
-                    \DB::table('enrollments')
-                        ->where('id', $existingEnrollment->id)
-                        ->update([
-                            'final_grade'   => $gradeNum,
-                            'status'        => $enrollmentStatus,
-                            'serial_number' => $finalSerial ?: $existingEnrollment->serial_number,
-                            'updated_at'    => now(),
-                        ]);
-                } else {
-                    \DB::table('enrollments')->insert([
-                        'student_id'    => $student->id,
-                        'section_id'    => $section->id,
-                        'final_grade'   => $gradeNum,
-                        'status'        => $enrollmentStatus,
-                        'serial_number' => $finalSerial,
-                        'created_at'    => now(),
-                        'updated_at'    => now(),
-                    ]);
-                }
+                $matchedRows[] = [
+                    'student' => $student,
+                    'row'     => $row,
+                ];
 
                 $results[] = [
-                    'student_no' => $student->student_id,
-                    'name'       => trim($lastName . ', ' . $firstName, ', '),
-                    'grade'      => $rawGrade,
-                    'remarks'    => $remarks,
-                    'is_new'     => $isNew,
-                    'email'      => $student->email ?? null,
+                    'student_no'     => $student->student_id ?: ($row['student_no'] ?: 'N/A'),
+                    'name'           => trim(($student->last_name ?? '') . ', ' . ($student->first_name ?? ''), ', ') ?: $row['raw_name'],
+                    'grade'          => $row['raw_grade'],
+                    'remarks'        => $row['remarks'],
+                    'is_new'         => false,
+                    'in_database'    => true,
+                    'email'          => $student->email ?? null,
+                    'status_message' => 'Matched in database',
+                ];
+            } else {
+                // RECORD IS NOT ON DATABASE:
+                // DO NOT upload or create this student in the database!
+                $unmatchedRows[] = $row;
+
+                $results[] = [
+                    'student_no'     => $row['student_no'] ?: 'N/A',
+                    'name'           => $row['raw_name'],
+                    'grade'          => $row['raw_grade'] !== null ? $row['raw_grade'] : '-',
+                    'remarks'        => 'Not on Database',
+                    'is_new'         => false,
+                    'in_database'    => false,
+                    'email'          => null,
+                    'status_message' => 'Record is not on database',
                 ];
             }
+        }
 
-            // 4. Record Audit Log
+        // If NONE of the uploaded student records exist in the database:
+        if (empty($matchedRows)) {
+            return response()->json([
+                'success' => false,
+                'message' => "The record is not on database. None of the student records exist in the database.",
+                'summary' => [
+                    'total'           => count($parsedRows),
+                    'matched'         => 0,
+                    'not_in_database' => count($unmatchedRows),
+                    'section'         => $section->section_name,
+                ],
+                'results' => $results,
+            ], 422);
+        }
+
+        // 8. Bulk Database Updates for matched records only
+        \DB::beginTransaction();
+        try {
+            $now = now();
+            $enrollmentInserts = [];
+
+            foreach ($matchedRows as $item) {
+                $st = $item['student'];
+                $r = $item['row'];
+
+                // Update student grade fields
+                $stUpdate = [];
+                if ($r['grade_enum']) {
+                    $stUpdate['grade'] = $r['grade_enum'];
+                }
+                if ($r['grade_num'] !== null) {
+                    $stUpdate['numerical_grade'] = $r['grade_num'];
+                }
+                if (!empty($stUpdate)) {
+                    Student::where('id', $st->id)->update($stUpdate);
+                }
+
+                // Enrollment update / insert
+                $serial = $r['serial_no'];
+                if (!empty($serial) && isset($existingSerials[$serial])) {
+                    $owner = $existingSerials[$serial];
+                    if ($owner->student_id != $st->id) {
+                        $serial = null; // Prevent unique constraint collision
+                    }
+                }
+
+                if (isset($existingEnrollments[$st->id])) {
+                    $existingEnr = $existingEnrollments[$st->id];
+                    \DB::table('enrollments')->where('id', $existingEnr->id)->update([
+                        'final_grade'   => $r['grade_num'] !== null ? $r['grade_num'] : $existingEnr->final_grade,
+                        'status'        => $r['enrollment_status'],
+                        'serial_number' => $serial ?: $existingEnr->serial_number,
+                        'updated_at'    => $now,
+                    ]);
+                } else {
+                    $enrollmentInserts[] = [
+                        'student_id'    => $st->id,
+                        'section_id'    => $section->id,
+                        'final_grade'   => $r['grade_num'],
+                        'status'        => $r['enrollment_status'],
+                        'serial_number' => $serial,
+                        'created_at'    => $now,
+                        'updated_at'    => $now,
+                    ];
+                }
+            }
+
+            if (!empty($enrollmentInserts)) {
+                \DB::table('enrollments')->insert($enrollmentInserts);
+            }
+
+            // 9. Audit Log
             $user = auth()->user();
+            $totalCount = count($parsedRows);
+            $matchedCount = count($matchedRows);
+            $notInDbCount = count($unmatchedRows);
+
             AuditLog::record(
                 'Imported Grades',
                 'Grades',
-                $sectionName,
-                "Processed OCR Grade sheet for section $sectionName from file: $filename. Total: $totalCount, Matched: $matchedCount, Created: $createdCount, Passed: $passedCount, Failed: $failedCount",
+                $section->section_name,
+                "Processed OCR Grade sheet for section {$section->section_name} from file: $filename. Total: $totalCount, Uploaded/Matched: $matchedCount, Not on Database: $notInDbCount, Passed: $passedCount, Failed: $failedCount",
                 'system',
                 [
                     'username' => $user ? $user->name : 'NSTP Coordinator',
@@ -2073,17 +2267,22 @@ class CoordinatorController extends Controller
 
             \DB::commit();
 
+            $msg = "Approved grades recorded successfully for {$matchedCount} student(s).";
+            if ($notInDbCount > 0) {
+                $msg .= " {$notInDbCount} record(s) not on database were not uploaded.";
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'OCR Grade Import processed successfully.',
+                'message' => $msg,
                 'summary' => [
-                    'total'     => $totalCount,
-                    'matched'   => $matchedCount,
-                    'created'   => $createdCount,
-                    'passed'    => $passedCount,
-                    'failed'    => $failedCount,
-                    'section'   => $sectionName,
-                    'component' => $section->component,
+                    'total'           => $totalCount,
+                    'matched'         => $matchedCount,
+                    'not_in_database' => $notInDbCount,
+                    'passed'          => $passedCount,
+                    'failed'          => $failedCount,
+                    'section'         => $section->section_name,
+                    'component'       => $section->component,
                 ],
                 'results' => $results,
             ]);
@@ -2201,6 +2400,16 @@ class CoordinatorController extends Controller
         if (!empty($data['assigned_section'])) {
             $section = Section::where('section_name', $data['assigned_section'])->first();
             if ($section) {
+                // If another instructor is already assigned to this section, protect that instructor's assignment!
+                if ($section->instructor_id && $section->instructor_id != $instructor->id) {
+                    return back()->with('error', "Section {$section->section_name} is already assigned to another instructor and cannot be reassigned.");
+                }
+
+                // Ensure section component matches instructor's department/scope if not General
+                if (!in_array(strtoupper($instructor->dept), ['GENERAL', 'ALL']) && strtoupper($section->component) !== strtoupper($instructor->dept)) {
+                    return back()->with('error', "Section {$section->section_name} ({$section->component}) is outside the instructor's scope ({$instructor->dept}).");
+                }
+
                 $section->update([
                     'instructor_id' => $instructor->id,
                 ]);
@@ -2382,27 +2591,60 @@ class CoordinatorController extends Controller
         $sections = Section::where('instructor_id', $instructor->id)
             ->paginate(5, ['*'], 'sections_page');
 
+        // All sections assigned to this instructor within their assigned scope
+        $assignedSectionsQuery = Section::where('instructor_id', $instructor->id);
+        if (in_array(strtoupper((string)$instructor->dept), ['CWTS', 'LTS', 'ROTC'])) {
+            $assignedSectionsQuery->where('component', strtoupper($instructor->dept));
+        }
+        $instructorAssignedSections = $assignedSectionsQuery->orderBy('section_name')->get();
+        if ($instructorAssignedSections->isEmpty()) {
+            $instructorAssignedSections = Section::where('instructor_id', $instructor->id)->orderBy('section_name')->get();
+        }
+
         // Paginate handled students with custom parameter name
         $studentsPaginated = Student::join('enrollments', 'students.id', '=', 'enrollments.student_id')
             ->join('sections', 'sections.id', '=', 'enrollments.section_id')
             ->where('sections.instructor_id', $instructor->id)
-            ->select('students.*', 'sections.section_name as section_code', 'enrollments.status as enrollment_status')
+            ->select(
+                'students.id as db_id',
+                'students.student_id',
+                'students.first_name',
+                'students.last_name',
+                'students.course',
+                'students.email',
+                'students.sex',
+                'students.date_of_birth',
+                'students.place_of_birth',
+                'students.contact_number',
+                'students.complete_address',
+                'students.numerical_grade',
+                'enrollments.final_grade as enrollment_final_grade',
+                'sections.section_name as section_code',
+                'enrollments.status as enrollment_status'
+            )
             ->paginate(10, ['*'], 'students_page');
 
         $mappedCollection = $studentsPaginated->getCollection()->map(function($student) {
             return (object)[
-                'id' => $student->student_id,
-                'name' => trim($student->last_name . ', ' . $student->first_name, ', '),
-                'course' => $student->course ?? 'N/A',
-                'section' => $student->section_code,
-                'email' => $student->email ?? 'N/A',
-                'status' => $student->enrollment_status ?? 'Active',
+                'db_id'       => $student->db_id,
+                'id'          => $student->student_id,
+                'name'        => trim($student->last_name . ', ' . $student->first_name, ', '),
+                'course'      => $student->course ?? 'N/A',
+                'section'     => $student->section_code,
+                'email'       => $student->email ?? 'N/A',
+                'status'      => $student->enrollment_status ?? 'Active',
+                'gender'      => $student->sex ?? 'Female',
+                'dob'         => $student->date_of_birth ? \Carbon\Carbon::parse($student->date_of_birth)->format('Y-m-d') : '',
+                'birth_place' => $student->place_of_birth ?? '',
+                'cell_no'     => $student->contact_number ?? '',
+                'address'     => $student->complete_address ?? '',
+                'final_grade' => $student->enrollment_final_grade ?? $student->numerical_grade ?? '',
             ];
         });
         $studentsPaginated->setCollection($mappedCollection);
         $students = $studentsPaginated;
 
-        return view('coordinator.instructor_info', compact('instructor', 'sections', 'students'));
+        return view('coordinator.instructor_info', compact('instructor', 'sections', 'students', 'instructorAssignedSections'));
     }
 
     public function updateStudentInSection(Request $request, $sectionCode, $studentId)
@@ -2415,6 +2657,7 @@ class CoordinatorController extends Controller
             'name'              => 'required|string|max:255',
             'email'             => 'nullable|email|max:255',
             'course'            => 'nullable|string|max:64',
+            'section'           => 'nullable|string|exists:sections,section_name',
             'enrollment_status' => 'required|in:Active,Passed,Failed,Pending,Dropped',
             'gender'            => 'nullable|string|max:16',
             'dob'               => 'nullable|date',
@@ -2428,6 +2671,14 @@ class CoordinatorController extends Controller
         
         $oldStudentNo = $student->student_id;
         $gradeVal = is_numeric($data['final_grade']) ? floatval($data['final_grade']) : null;
+
+        $targetSection = $section;
+        if (!empty($data['section']) && $data['section'] !== $sectionCode) {
+            $newSec = Section::where('section_name', $data['section'])->first();
+            if ($newSec) {
+                $targetSection = $newSec;
+            }
+        }
 
         $studentUpdate = [
             'student_id'      => $data['student_no'],
@@ -2456,20 +2707,52 @@ class CoordinatorController extends Controller
         $student->update($studentUpdate);
 
         // Map status value to enrollment/student properties if needed
-        \DB::table('enrollments')
-            ->where('student_id', $student->id)
-            ->where('section_id', $section->id)
-            ->update([
-                'status' => $data['enrollment_status'],
-                'final_grade' => $gradeVal,
-                'updated_at' => now(),
-            ]);
+        if ($targetSection->id !== $section->id) {
+            $alreadyEnrolled = \DB::table('enrollments')
+                ->where('student_id', $student->id)
+                ->where('section_id', $targetSection->id)
+                ->first();
+
+            if ($alreadyEnrolled) {
+                \DB::table('enrollments')
+                    ->where('id', $alreadyEnrolled->id)
+                    ->update([
+                        'status'      => $data['enrollment_status'],
+                        'final_grade' => $gradeVal,
+                        'updated_at'  => now(),
+                    ]);
+                \DB::table('enrollments')
+                    ->where('student_id', $student->id)
+                    ->where('section_id', $section->id)
+                    ->delete();
+            } else {
+                \DB::table('enrollments')
+                    ->where('student_id', $student->id)
+                    ->where('section_id', $section->id)
+                    ->update([
+                        'section_id'  => $targetSection->id,
+                        'status'      => $data['enrollment_status'],
+                        'final_grade' => $gradeVal,
+                        'updated_at'  => now(),
+                    ]);
+            }
+        } else {
+            \DB::table('enrollments')
+                ->where('student_id', $student->id)
+                ->where('section_id', $section->id)
+                ->update([
+                    'status'      => $data['enrollment_status'],
+                    'final_grade' => $gradeVal,
+                    'updated_at'  => now(),
+                ]);
+        }
 
         // Keep class_list_students updated
         \DB::table('class_list_students')
             ->where('section_name', $sectionCode)
             ->where('student_id', $oldStudentNo)
             ->update([
+                'section_name'   => $targetSection->section_name,
                 'student_id'     => $data['student_no'],
                 'name'           => $data['name'],
                 'email'          => $data['email'] ?? null,
@@ -2488,7 +2771,7 @@ class CoordinatorController extends Controller
             'Updated Student in Section',
             'Students',
             $student->student_id,
-            "Updated student {$student->last_name}, {$student->first_name} inside section {$section->section_name}",
+            "Updated student {$student->last_name}, {$student->first_name} inside section {$targetSection->section_name}",
             'edit',
             [
                 'username' => $user ? $user->name : 'NSTP Coordinator',

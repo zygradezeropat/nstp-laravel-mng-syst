@@ -162,7 +162,39 @@ class InstructorController extends Controller
         // Merge and sort pending submissions
         $pendingSubmissions = $plansList->concat($reportsList)->sortByDesc('updated_at');
 
-        return view('instructor.dashboard', compact('stats', 'pendingSubmissions'));
+        // Handled students grade breakdown
+        $handledStudentQuery = DB::table('students')
+            ->join('enrollments', 'students.id', '=', 'enrollments.student_id')
+            ->join('sections', 'enrollments.section_id', '=', 'sections.id')
+            ->where('sections.instructor_id', $instructorId);
+
+        $instPassed = (clone $handledStudentQuery)->where('students.grade', 'pass')->count();
+        $instFailed = (clone $handledStudentQuery)->where('students.grade', 'fail')->count();
+        $instPending = max(0, $totalStudents - ($instPassed + $instFailed));
+
+        $sectionsBreakdown = Section::where('instructor_id', $instructorId)
+            ->withCount('students')
+            ->get();
+
+        $secLabels = $sectionsBreakdown->pluck('section_name')->toArray();
+        $secCounts = $sectionsBreakdown->pluck('students_count')->toArray();
+
+        $chartData = [
+            'grades' => [
+                'labels' => ['Passed', 'Failed', 'Pending Grading'],
+                'data'   => [$instPassed, $instFailed, $instPending],
+                'colors' => ['#10b981', '#f43f5e', '#f59e0b'],
+                'total'  => $totalStudents,
+            ],
+            'sections' => [
+                'labels' => !empty($secLabels) ? $secLabels : ['No Section Assigned'],
+                'data'   => !empty($secCounts) ? $secCounts : [0],
+                'colors' => ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899'],
+                'total'  => $totalStudents,
+            ],
+        ];
+
+        return view('instructor.dashboard', compact('stats', 'pendingSubmissions', 'chartData'));
     }
 
     public function classes(Request $request)

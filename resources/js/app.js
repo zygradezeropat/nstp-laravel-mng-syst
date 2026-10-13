@@ -20,6 +20,7 @@ initUI();
 
 // Setup global window functions
 setupDragDrop();
+attachSystemEvents();
 
 // Global stub for syncSectionStudentsToArchive
 window.syncSectionStudentsToArchive = function () { /* no-op */ };

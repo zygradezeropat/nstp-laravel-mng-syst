@@ -29,6 +29,18 @@ class Section extends Model
         return $this->belongsTo(PortalUser::class, 'instructor_id');
     }
 
+    /** Enrollments in this section. */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class, 'section_id');
+    }
+
+    /** Students enrolled in this section. */
+    public function students()
+    {
+        return $this->belongsToMany(Student::class, 'enrollments', 'section_id', 'student_id');
+    }
+
     /** Get the instructor's name, or fallback to the ROTC officer if component is ROTC. */
     public function getInstructorNameAttribute(): string
     {

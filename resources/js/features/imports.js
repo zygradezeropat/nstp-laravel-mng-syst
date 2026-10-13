@@ -241,22 +241,8 @@ export function attachImportEvents() {
                                 S.studentArchive[existIdx].grades.push(gradeRecord);
                                 S.studentArchive[existIdx].finalGrade = gradeRecord.finalGrade;
                                 S.studentArchive[existIdx].remarks = gradeRecord.remarks;
-                            } else {
-                                S.studentArchive.push({
-                                    studentNo: `2024-${String(Math.floor(10000 + Math.random() * 90000))}`,
-                                    name: sName,
-                                    gender: 'Female',
-                                    section: '', 
-                                    program: prog,
-                                    instructor: 'Prof. Julian Santos',
-                                    finalGrade: gradeRecord.finalGrade,
-                                    remarks: gradeRecord.remarks,
-                                    schoolYear: '2025-2026',
-                                    semester: '1st Semester',
-                                    dateArchived: gradeRecord.dateArchived,
-                                    grades: [gradeRecord]
-                                });
                             }
+                            // If record is not in database/archive, do not upload/create it
                         });
                     }
 

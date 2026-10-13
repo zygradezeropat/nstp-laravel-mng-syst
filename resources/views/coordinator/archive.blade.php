@@ -77,13 +77,21 @@
                 {{ $s->archived_at }}
             </td>
             <td class="py-3 px-3 text-right" onclick="event.stopPropagation();">
-                <button type="button" onclick="openViewStudentModal({{ json_encode($s) }})" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer">
-                    <x-icon name="eye" class="w-3.5 h-3.5" /> View Details
-                </button>
+                <div class="inline-flex items-center gap-1.5 justify-end">
+                    <button type="button" onclick="openViewStudentModal({{ json_encode($s) }})" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 transition cursor-pointer" title="View Full Details">
+                        <x-icon name="eye" class="w-3.5 h-3.5" /> View
+                    </button>
+                    <button type="button" onclick="openRestoreModal('{{ $s->db_id }}', '{{ addslashes($s->name) }}', '{{ $s->id }}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition cursor-pointer" title="Restore to Masterlist">
+                        <x-icon name="check2" class="w-3.5 h-3.5" /> Restore
+                    </button>
+                    <button type="button" onclick="openPermanentDeleteModal('{{ $s->db_id }}', '{{ addslashes($s->name) }}', '{{ $s->id }}')" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200 transition cursor-pointer" title="Permanently Delete (Forever Gone)">
+                        <x-icon name="trash" class="w-3.5 h-3.5" /> Delete
+                    </button>
+                </div>
             </td>
         </tr>
         @empty
-        <tr id="archiveEmptyRow"><td colspan="7" class="py-8 text-center text-slate-400 text-sm">No archived student records found.</td></tr>
+        <tr id="archiveEmptyRow"><td colspan="6" class="py-8 text-center text-slate-400 text-sm">No archived student records found.</td></tr>
         @endforelse
     </x-table>
 
@@ -234,11 +242,18 @@
 
         <!-- Modal Footer Actions -->
         <div class="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between rounded-b-2xl">
-            <div id="restoreContainer">
+            <div class="flex items-center gap-2">
                 <form id="restoreStudentForm" method="POST" action="">
                     @csrf
                     <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-xs cursor-pointer">
-                        <x-icon name="check2" class="w-4 h-4" /> Restore Student Record
+                        <x-icon name="check2" class="w-4 h-4" /> Restore to Masterlist
+                    </button>
+                </form>
+                <form id="deleteStudentPermanentForm" method="POST" action="" onsubmit="return confirm('Are you sure you want to permanently delete this student record? This action cannot be undone and the record will be forever gone from the database.');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition shadow-xs cursor-pointer">
+                        <x-icon name="trash" class="w-4 h-4" /> Delete Permanently
                     </button>
                 </form>
             </div>
@@ -249,10 +264,94 @@
     </div>
 </div>
 
+<!-- Restore Student Confirmation Modal -->
+<div id="restoreStudentOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 p-6 text-center space-y-4">
+        <div class="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center mx-auto shadow-sm">
+            <x-icon name="check2" class="w-6 h-6" />
+        </div>
+        <div>
+            <h3 class="text-base font-bold text-slate-800">Restore to Masterlist</h3>
+            <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                Are you sure you want to restore <strong id="restoreModalStudentName" class="text-slate-800"></strong> (<span id="restoreModalStudentId" class="font-mono"></span>)? This record will be returned to the active student Masterlist.
+            </p>
+        </div>
+        <form id="restoreConfirmForm" method="POST" action="" class="flex items-center justify-center gap-3 pt-2">
+            @csrf
+            <button type="button" onclick="closeRestoreModal()" class="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+                Cancel
+            </button>
+            <button type="submit" class="px-4 py-2 text-xs font-semibold rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 transition shadow-sm cursor-pointer">
+                Confirm & Restore
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Permanent Delete Confirmation Modal -->
+<div id="permanentDeleteOverlay" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm hidden transition-opacity duration-200">
+    <div class="bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md mx-4 p-6 text-center space-y-4">
+        <div class="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 flex items-center justify-center mx-auto shadow-sm">
+            <x-icon name="trash" class="w-6 h-6" />
+        </div>
+        <div>
+            <h3 class="text-base font-bold text-slate-800">Permanently Delete Record</h3>
+            <p class="text-xs text-slate-500 mt-1 leading-relaxed">
+                Are you sure you want to permanently delete <strong id="deleteModalStudentName" class="text-slate-800"></strong> (<span id="deleteModalStudentId" class="font-mono"></span>)?
+            </p>
+            <div class="mt-2.5 p-3 rounded-xl bg-rose-50/70 border border-rose-100 text-[11px] text-rose-700 font-medium">
+                This record and all associated grades/enrollments will be <strong class="underline">forever gone</strong> from the database. This action cannot be undone.
+            </div>
+        </div>
+        <form id="permanentDeleteConfirmForm" method="POST" action="" class="flex items-center justify-center gap-3 pt-2">
+            @csrf
+            @method('DELETE')
+            <button type="button" onclick="closePermanentDeleteModal()" class="px-4 py-2 text-xs font-semibold rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition cursor-pointer">
+                Cancel
+            </button>
+            <button type="submit" class="px-4 py-2 text-xs font-semibold rounded-xl bg-rose-600 text-white hover:bg-rose-700 transition shadow-sm cursor-pointer">
+                Delete Forever
+            </button>
+        </form>
+    </div>
+</div>
+
 @push('scripts')
 <script>
     let currentArchivePage = 1;
     const archivePageSize = 10;
+
+    window.openRestoreModal = function(dbId, name, studentId) {
+        document.getElementById('restoreModalStudentName').textContent = name || 'Student';
+        document.getElementById('restoreModalStudentId').textContent = studentId || 'N/A';
+        const form = document.getElementById('restoreConfirmForm');
+        if (form && dbId) {
+            form.action = "{{ route('coordinator.archive.restore', ':id') }}".replace(':id', dbId);
+        }
+        const overlay = document.getElementById('restoreStudentOverlay');
+        if (overlay) overlay.classList.remove('hidden');
+    };
+
+    window.closeRestoreModal = function() {
+        const overlay = document.getElementById('restoreStudentOverlay');
+        if (overlay) overlay.classList.add('hidden');
+    };
+
+    window.openPermanentDeleteModal = function(dbId, name, studentId) {
+        document.getElementById('deleteModalStudentName').textContent = name || 'Student';
+        document.getElementById('deleteModalStudentId').textContent = studentId || 'N/A';
+        const form = document.getElementById('permanentDeleteConfirmForm');
+        if (form && dbId) {
+            form.action = "{{ route('coordinator.archive.destroy', ':id') }}".replace(':id', dbId);
+        }
+        const overlay = document.getElementById('permanentDeleteOverlay');
+        if (overlay) overlay.classList.remove('hidden');
+    };
+
+    window.closePermanentDeleteModal = function() {
+        const overlay = document.getElementById('permanentDeleteOverlay');
+        if (overlay) overlay.classList.add('hidden');
+    };
 
     window.openViewStudentModal = function(student) {
         if (!student) return;
@@ -296,10 +395,15 @@
             }
         }
 
-        // Restore Form Setup
+        // Restore & Permanent Delete Forms in View Modal Setup
         const restoreForm = document.getElementById('restoreStudentForm');
         if (restoreForm && student.db_id) {
             restoreForm.action = "{{ route('coordinator.archive.restore', ':id') }}".replace(':id', student.db_id);
+        }
+
+        const deleteForm = document.getElementById('deleteStudentPermanentForm');
+        if (deleteForm && student.db_id) {
+            deleteForm.action = "{{ route('coordinator.archive.destroy', ':id') }}".replace(':id', student.db_id);
         }
 
         overlay.classList.remove('hidden');
@@ -414,15 +518,16 @@
         rows.forEach(r => {
             if (!r.classList.contains('hidden')) {
                 const cols = r.querySelectorAll('td');
-                if (cols.length >= 6) {
+                if (cols.length >= 5) {
                     const id = cols[0].innerText.trim();
-                    const name = cols[1].innerText.replace(/\n/g, ' ').trim();
+                    const serial = r.getAttribute('data-serial-no') || 'N/A';
+                    const name = cols[1].querySelector('.font-bold') ? cols[1].querySelector('.font-bold').innerText.trim() : cols[1].innerText.replace(/\n/g, ' ').trim();
                     const course = cols[2].innerText.replace(/\n/g, ' ').trim();
                     const program = cols[3].innerText.trim();
-                    const status = cols[4].innerText.trim();
-                    const date = cols[5].innerText.trim();
+                    const status = r.getAttribute('data-status') || 'Archived';
+                    const date = cols[4].innerText.trim();
 
-                    const rowData = [id, '', name, course, program, status, date].map(c => '"' + c.replace(/"/g, '""') + '"');
+                    const rowData = [id, serial, name, course, program, status, date].map(c => '"' + (c || '').replace(/"/g, '""') + '"');
                     csvContent += rowData.join(",") + "\n";
                 }
             }
