@@ -67,6 +67,20 @@ class AccomplishmentReportController extends Controller
             'submitted_date' => now(),
         ]));
 
+        if ($report->status === 'Pending') {
+            $user = auth()->user() ?? $report->instructor;
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'Accomplishment Report Submitted',
+                    'message' => ($user ? "{$user->name} submitted " : "New ") . "accomplishment report \"{$report->title}\" for review.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return response()->json(['success' => true, 'report' => $report], 201);
     }
 

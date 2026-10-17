@@ -88,9 +88,43 @@
                         </span>
                         <input type="text" placeholder="Search..." class="w-72 pl-9 pr-3 py-2 text-sm rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-slate-300 focus:outline-none" />
                     </div>
-                    <button class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-700 relative">
-                        <x-icon name="bell" class="w-[18px] h-[18px]" />
-                    </button>
+                    @php
+                        $initialUnreadCount = auth()->check() ? \App\Models\PortalNotification::where('user_id', auth()->id())->where('is_read', false)->count() : 0;
+                    @endphp
+                    <div class="relative" id="navNotificationWrapper">
+                        <button type="button" id="navNotificationBtn" onclick="toggleNavNotificationDropdown()" class="w-9 h-9 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:text-slate-700 hover:border-slate-300 transition relative cursor-pointer shadow-xs" title="Notifications">
+                            <x-icon name="bell" class="w-[18px] h-[18px]" />
+                            <span id="navNotificationBadge" class="{{ $initialUnreadCount > 0 ? '' : 'hidden' }} absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-extrabold rounded-full flex items-center justify-center ring-2 ring-white shadow-xs">
+                                {{ $initialUnreadCount > 99 ? '99+' : $initialUnreadCount }}
+                            </span>
+                        </button>
+
+                        <!-- Notification Dropdown Menu -->
+                        <div id="navNotificationDropdown" class="hidden absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 overflow-hidden transform origin-top-right transition-all duration-200">
+                            <!-- Header -->
+                            <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
+                                <div class="flex items-center gap-2">
+                                    <span class="font-extrabold text-sm text-slate-800">Notifications</span>
+                                    <span id="navNotificationHeaderBadge" class="{{ $initialUnreadCount > 0 ? '' : 'hidden' }} text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200">
+                                        <span id="navNotificationCountText">{{ $initialUnreadCount }}</span> new
+                                    </span>
+                                </div>
+                                <button type="button" onclick="markAllNotificationsAsRead()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline transition cursor-pointer">
+                                    Mark all read
+                                </button>
+                            </div>
+
+                            <!-- Notification List -->
+                            <div id="navNotificationList" class="max-h-80 overflow-y-auto divide-y divide-slate-100 text-xs">
+                                <div class="p-6 text-center text-slate-400">Loading notifications...</div>
+                            </div>
+
+                            <!-- Footer -->
+                            <div class="px-4 py-2.5 bg-slate-50/60 border-t border-slate-100 text-center">
+                                <span class="text-[11px] text-slate-400 font-medium">Updates for submissions, approvals, and notices</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </header>
             <main class="flex-1 px-8 py-7 space-y-6">
@@ -377,6 +411,226 @@
         window.alert = function(message) {
             window.showAlertModal(message);
         };
+
+        // ── Navbar Notifications System ─────────────────────────────────────
+        window.PORTAL_USER = {
+            id: {{ auth()->id() ?? 'null' }},
+            email: @json(auth()->user()?->email ?? ''),
+            role: @json(auth()->user()?->role ?? '')
+        };
+
+        let cachedNotifications = [];
+
+        function toggleNavNotificationDropdown() {
+            const dropdown = document.getElementById('navNotificationDropdown');
+            if (!dropdown) return;
+            const isHidden = dropdown.classList.contains('hidden');
+            if (isHidden) {
+                dropdown.classList.remove('hidden');
+                fetchNavNotifications();
+            } else {
+                dropdown.classList.add('hidden');
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            const wrapper = document.getElementById('navNotificationWrapper');
+            const dropdown = document.getElementById('navNotificationDropdown');
+            if (wrapper && dropdown && !dropdown.classList.contains('hidden')) {
+                if (!wrapper.contains(e.target)) {
+                    dropdown.classList.add('hidden');
+                }
+            }
+        });
+
+        function getNotificationIconHtml(title, message) {
+            const text = ((title || '') + ' ' + (message || '')).toLowerCase();
+            if (text.includes('approved') || text.includes('reviewed')) {
+                return `<div class="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
+                </div>`;
+            } else if (text.includes('reject')) {
+                return `<div class="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                </div>`;
+            } else if (text.includes('revision')) {
+                return `<div class="w-8 h-8 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                </div>`;
+            } else if (text.includes('submitted') || text.includes('resubmitted') || text.includes('new report') || text.includes('new activity')) {
+                return `<div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                </div>`;
+            }
+            return `<div class="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+            </div>`;
+        }
+
+        function resolveNotificationDestination(item) {
+            const role = (window.PORTAL_USER.role || '').toLowerCase();
+            const text = ((item.title || '') + ' ' + (item.message || '')).toLowerCase();
+
+            if (role === 'coordinator') {
+                return '{{ route("coordinator.approvals") }}';
+            } else if (role === 'instructor') {
+                if (text.includes('accomplishment') || text.includes('report')) {
+                    return '{{ route("instructor.reports") }}';
+                } else if (text.includes('plan')) {
+                    return '{{ route("instructor.plans") }}';
+                } else if (text.includes('section') || text.includes('class')) {
+                    return '{{ route("instructor.classes") }}';
+                }
+                return '{{ route("instructor.dashboard") }}';
+            } else if (role === 'rotc') {
+                if (text.includes('accomplishment') || text.includes('report')) {
+                    return '{{ route("rotc.reports") }}';
+                } else if (text.includes('design') || text.includes('brief') || text.includes('plan')) {
+                    return '{{ route("rotc.designs") }}';
+                } else if (text.includes('platoon') || text.includes('section')) {
+                    return '{{ route("rotc.platoons") }}';
+                }
+                return '{{ route("rotc.dashboard") }}';
+            }
+            return null;
+        }
+
+        async function handleNotificationItemClick(id, targetUrl) {
+            try {
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                await fetch(`/api/notifications/${id}/read`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrf || '',
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                // Update cached status
+                const notif = cachedNotifications.find(n => n.id === id);
+                if (notif) notif.is_read = true;
+                updateNotificationBadges();
+            } catch (err) {
+                console.error('Error marking notification read:', err);
+            }
+
+            if (targetUrl) {
+                window.location.href = targetUrl;
+            }
+        }
+
+        function updateNotificationBadges() {
+            const unreadCount = cachedNotifications.filter(n => !n.is_read).length;
+            const badge = document.getElementById('navNotificationBadge');
+            const headerBadge = document.getElementById('navNotificationHeaderBadge');
+            const countText = document.getElementById('navNotificationCountText');
+
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.classList.remove('hidden');
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+
+            if (headerBadge && countText) {
+                if (unreadCount > 0) {
+                    headerBadge.classList.remove('hidden');
+                    countText.textContent = unreadCount;
+                } else {
+                    headerBadge.classList.add('hidden');
+                }
+            }
+        }
+
+        function renderNotificationList() {
+            const container = document.getElementById('navNotificationList');
+            if (!container) return;
+
+            if (!cachedNotifications || cachedNotifications.length === 0) {
+                container.innerHTML = `
+                    <div class="py-12 px-6 text-center">
+                        <div class="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3 shadow-inner">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                        </div>
+                        <p class="text-xs font-bold text-slate-700">No Notifications</p>
+                        <p class="text-[11px] text-slate-400 mt-1">You are up to date! System alerts, report statuses, and submissions will appear here.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            cachedNotifications.forEach(n => {
+                const iconHtml = getNotificationIconHtml(n.title, n.message);
+                const destUrl = resolveNotificationDestination(n);
+                const unreadBg = !n.is_read ? 'bg-indigo-50/50 hover:bg-indigo-50/80 font-medium' : 'bg-white hover:bg-slate-50 text-slate-600';
+                const unreadDot = !n.is_read ? '<span class="w-2 h-2 rounded-full bg-indigo-600 shrink-0"></span>' : '';
+
+                html += `
+                    <div onclick="handleNotificationItemClick(${n.id}, '${destUrl || ''}')" class="px-4 py-3.5 flex items-start gap-3 transition cursor-pointer ${unreadBg}">
+                        ${iconHtml}
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="font-bold text-xs text-slate-800 truncate">${n.title || 'Notification'}</span>
+                                ${unreadDot}
+                            </div>
+                            <p class="text-[11px] text-slate-600 leading-relaxed mt-0.5 line-clamp-2">${n.message || ''}</p>
+                            <span class="text-[10px] text-slate-400 font-medium mt-1.5 inline-block">${n.created_at || 'Just now'}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function fetchNavNotifications() {
+            try {
+                const emailParam = window.PORTAL_USER.email ? `?email=${encodeURIComponent(window.PORTAL_USER.email)}` : '';
+                const response = await fetch(`/api/notifications${emailParam}`, {
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (!response.ok) return;
+                const data = await response.json();
+                if (Array.isArray(data)) {
+                    cachedNotifications = data;
+                    updateNotificationBadges();
+                    renderNotificationList();
+                }
+            } catch (err) {
+                console.error('Error fetching navbar notifications:', err);
+            }
+        }
+
+        async function markAllNotificationsAsRead() {
+            try {
+                const emailParam = window.PORTAL_USER.email ? `?email=${encodeURIComponent(window.PORTAL_USER.email)}` : '';
+                const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+                await fetch(`/api/notifications/read-all${emailParam}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': csrf || '',
+                        'Accept': 'application/json'
+                    }
+                });
+
+                cachedNotifications = cachedNotifications.map(n => ({ ...n, is_read: true }));
+                updateNotificationBadges();
+                renderNotificationList();
+            } catch (err) {
+                console.error('Error marking all notifications read:', err);
+            }
+        }
+
+        // Initialize notification polling on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            fetchNavNotifications();
+            // Poll every 25 seconds for real-time status updates
+            setInterval(fetchNavNotifications, 25000);
+        });
     </script>
 
     @if(session('success'))

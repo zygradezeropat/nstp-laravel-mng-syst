@@ -21,7 +21,6 @@
             <th class="py-3.5 px-4 font-semibold text-slate-600">Completed Date</th>
             <th class="py-3.5 px-4 font-semibold text-slate-600">Participants</th>
             <th class="py-3.5 px-4 font-semibold text-slate-600">Status</th>
-            <th class="py-3.5 px-4 font-semibold text-slate-600 text-right">Actions</th>
         </x-slot>
 
         @forelse($reports as $r)
@@ -67,28 +66,10 @@
                     </span>
                 @endif
             </td>
-            <td class="py-3 px-4 text-right space-x-1.5" onclick="event.stopPropagation();">
-                @if(strtolower($r->status ?? '') !== 'reviewed')
-                <button onclick="openEditReportModal('{{ $r->id }}', '{{ addslashes($r->title) }}', '{{ $r->section?->section_name === 'All Section' ? 'all' : $r->section_id }}', '{{ addslashes($r->location) }}', '{{ $r->completed_date ? $r->completed_date->format('Y-m-d') : '' }}', '{{ $r->participants_count }}', '{{ addslashes($r->accomplishments) }}', '{{ addslashes($r->report_file_path) }}', '{{ $r->status }}')" 
-                        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition border border-indigo-100 cursor-pointer"
-                        title="Edit Accomplishment Report">
-                    <x-icon name="pencil" class="w-3.5 h-3.5" /> Edit
-                </button>
-                @endif
-                @if(in_array(strtolower($r->status ?? 'draft'), ['draft', 'revision', 'rejected', 'reviewed']))
-                <form action="{{ route('instructor.reports.delete', $r->id) }}" method="POST" class="inline-block" onsubmit="return confirm('Are you sure you want to delete the accomplishment report \'{{ $r->title }}\'?')">
-                    @csrf
-                    @method('DELETE')
-                    <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 transition border border-rose-100 cursor-pointer" title="Delete Report">
-                        <x-icon name="trash" class="w-3.5 h-3.5" /> Delete
-                    </button>
-                </form>
-                @endif
-            </td>
         </tr>
         @empty
         <tr>
-            <td colspan="6" class="py-16 text-center text-slate-400 text-sm">
+            <td colspan="5" class="py-16 text-center text-slate-400 text-sm">
                 <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-400 mb-4 shadow-sm">
                     <x-icon name="filecheck" class="w-8 h-8" />
                 </div>
@@ -264,11 +245,20 @@
             // Map title string back to the plan option index
             const select = document.getElementById('formPlan');
             select.value = "";
+            let found = false;
             for (let i = 0; i < select.options.length; i++) {
                 if (select.options[i].text.includes(title)) {
                     select.selectedIndex = i;
+                    found = true;
                     break;
                 }
+            }
+            if (!found && title) {
+                const opt = document.createElement('option');
+                opt.value = "";
+                opt.textContent = title;
+                opt.selected = true;
+                select.appendChild(opt);
             }
 
             document.getElementById('formSection').value = sectionId;

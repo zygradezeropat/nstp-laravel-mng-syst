@@ -80,14 +80,28 @@
         <x-card title="New Report Draft">
             <form action="{{ route('rotc.reports.store') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
                 @csrf
+                @if($approvedPlans->isEmpty())
+                <div class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-start gap-2">
+                    <x-icon name="alertc" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                        <strong class="font-bold">No Pending Approved Activity Designs</strong>
+                        <p class="mt-0.5 text-amber-700 leading-relaxed">All approved activity designs have already been submitted and approved, or no approved designs are available.</p>
+                    </div>
+                </div>
+                @endif
+
                 {{-- Linked Activity --}}
                 <div>
                     <label class="block text-[11px] uppercase tracking-[0.18em] text-slate-500 mb-1.5">Linked Activity Plan</label>
                     <select name="activity_plan_id" required class="w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300">
-                        <option value="" disabled selected>Select Approved Activity</option>
-                        @foreach($approvedPlans as $plan)
-                            <option value="{{ $plan->id }}">{{ $plan->title }} ({{ $plan->section?->section_name ?? 'N/A' }})</option>
-                        @endforeach
+                        @if($approvedPlans->isEmpty())
+                            <option value="" disabled selected>No Pending Approved Activities</option>
+                        @else
+                            <option value="" disabled selected>Select Approved Activity</option>
+                            @foreach($approvedPlans as $plan)
+                                <option value="{{ $plan->id }}">{{ $plan->title }} ({{ $plan->section?->section_name ?? 'N/A' }})</option>
+                            @endforeach
+                        @endif
                     </select>
                 </div>
 
@@ -278,7 +292,20 @@
         form.action = '/rotc/reports/' + report.id;
 
         // Populate fields
-        document.getElementById('edit_activity_plan_id').value = report.activity_plan_id;
+        const planSelect = document.getElementById('edit_activity_plan_id');
+        if (report.activity_plan_id) {
+            let optionExists = Array.from(planSelect.options).some(opt => opt.value == report.activity_plan_id);
+            if (!optionExists) {
+                const opt = document.createElement('option');
+                opt.value = report.activity_plan_id;
+                opt.textContent = report.title + ' (' + (report.platoon_name || 'N/A') + ')';
+                planSelect.appendChild(opt);
+            }
+            planSelect.value = report.activity_plan_id;
+        } else {
+            planSelect.value = '';
+        }
+
         if (report.platoon_name === 'All Section') {
             document.getElementById('edit_section_id').value = 'all';
         } else {

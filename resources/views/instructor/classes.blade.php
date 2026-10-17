@@ -176,6 +176,7 @@
     </div>
 
     @push('scripts')
+        <script src="{{ asset('js/exceljs.min.js') }}"></script>
         <script>
             window.openGradeModal = function(studentNo, studentName, finalGrade, status) {
                 document.getElementById('gradeStudentNo').value = studentNo;
@@ -226,45 +227,226 @@
 
             // Injected unpaginated student list for complete Excel export
             const allStudents = @json($allStudents ?? []);
+            const sectionName = @json($section->section_name ?? 'Class');
+            const sectionSemester = @json($section->semester ?? '2nd Trimester');
+            const sectionSchoolYear = @json($section->school_year ?? '2025-2026');
 
-            window.exportToExcel = function() {
+            async function ensureExcelJS() {
+                if (window.ExcelJS) return window.ExcelJS;
+                return new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = "{{ asset('js/exceljs.min.js') }}";
+                    script.onload = () => resolve(window.ExcelJS);
+                    script.onerror = () => {
+                        const cdnScript = document.createElement('script');
+                        cdnScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js';
+                        cdnScript.onload = () => resolve(window.ExcelJS);
+                        cdnScript.onerror = () => reject(new Error('Failed to load ExcelJS library.'));
+                        document.head.appendChild(cdnScript);
+                    };
+                    document.head.appendChild(script);
+                });
+            }
+
+            window.exportToExcel = async function() {
                 if (!allStudents.length) {
-                    showAlertModal('No student records found to export.', 'Export Notice', 'warning');
+                    if (typeof showAlertModal === 'function') {
+                        showAlertModal('No student records found to export.', 'Export Notice', 'warning');
+                    } else {
+                        alert('No student records found to export.');
+                    }
                     return;
                 }
 
                 if (window.showProgressModal) {
-                    window.showProgressModal('Exporting Class Roster', 'Compiling student grades into Excel spreadsheet...', 35);
+                    window.showProgressModal('Exporting Class Attendance', 'Compiling class attendance sheet into Excel format...', 35);
                 }
 
-                setTimeout(() => {
-                    // Prepare XLSX headers and rows
-                    const rows = [
-                        ['Student ID', 'Student Name', 'Course', 'Final Grade', 'Status']
-                    ];
+                try {
+                    const ExcelLib = await ensureExcelJS();
+                    const wb = new ExcelLib.Workbook();
+                    wb.creator = 'DNSC NSTP';
+                    wb.lastModifiedBy = 'DNSC NSTP';
+                    wb.created = new Date();
+                    wb.modified = new Date();
 
-                    allStudents.forEach(s => {
-                        rows.push([
-                            s.student_no,
-                            s.name,
-                            s.course,
-                            s.final_grade,
-                            s.status
-                        ]);
+                    const ws = wb.addWorksheet('Sheet1', {
+                        views: [{ showGridLines: true }]
                     });
 
-                    // Generate sheet using SheetJS
-                    const wb = XLSX.utils.book_new();
-                    const ws = XLSX.utils.aoa_to_sheet(rows);
-                    const sectionName = "{{ $section->section_name ?? 'Class' }}";
-                    
-                    XLSX.utils.book_append_sheet(wb, ws, "Class List");
-                    XLSX.writeFile(wb, `Class_List_${sectionName}.xlsx`);
+                    // Define columns matching screenshot format:
+                    // Col A: #
+                    // Col B: Student No.
+                    // Col C: Name
+                    // Col D: Program
+                    // Cols E-V (18 attendance columns)
+                    ws.columns = [
+                        { key: 'num', width: 6 },
+                        { key: 'student_no', width: 17 },
+                        { key: 'name', width: 36 },
+                        { key: 'program', width: 15 },
+                        ...Array.from({ length: 18 }, (_, i) => ({ key: 'att_' + (i + 1), width: 3.8 }))
+                    ];
+
+                    // Row Heights
+                    ws.getRow(1).height = 18;
+                    ws.getRow(2).height = 20;
+                    ws.getRow(3).height = 18;
+                    ws.getRow(4).height = 18;
+                    ws.getRow(5).height = 20;
+                    ws.getRow(6).height = 22;
+
+                    // Row 2: "Davao Del Norte State College"
+                    ws.mergeCells('C2:D2');
+                    const c2 = ws.getCell('C2');
+                    c2.value = 'Davao Del Norte State College';
+                    c2.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FF000000' } };
+                    c2.alignment = { vertical: 'middle', horizontal: 'center' };
+
+                    // Row 3: "Class Attendance"
+                    ws.mergeCells('C3:D3');
+                    const c3 = ws.getCell('C3');
+                    c3.value = 'Class Attendance';
+                    c3.font = { name: 'Calibri', size: 11, color: { argb: 'FF000000' } };
+                    c3.alignment = { vertical: 'middle', horizontal: 'center' };
+
+                    // Row 4: Subtitle e.g. "2nd Trimester,S.Y.2025-2026"
+                    let semText = (sectionSemester || '').trim();
+                    if (!semText) {
+                        semText = '2nd Trimester';
+                    } else if (!/semester|trimester/i.test(semText)) {
+                        semText = `${semText} Trimester`;
+                    }
+                    const syText = (sectionSchoolYear || '2025-2026').trim();
+                    const subTitleText = `${semText},S.Y.${syText}`;
+
+                    ws.mergeCells('C4:D4');
+                    const c4 = ws.getCell('C4');
+                    c4.value = subTitleText;
+                    c4.font = { name: 'Calibri', size: 10, color: { argb: 'FF000000' } };
+                    c4.alignment = { vertical: 'middle', horizontal: 'center' };
+                    c4.border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } };
+                    ws.getCell('D4').border = { bottom: { style: 'thin', color: { argb: 'FF000000' } } };
+
+                    // Thin border styling for attendance grid & table
+                    const thinBorder = {
+                        top: { style: 'thin', color: { argb: 'FF000000' } },
+                        left: { style: 'thin', color: { argb: 'FF000000' } },
+                        bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                        right: { style: 'thin', color: { argb: 'FF000000' } }
+                    };
+
+                    // Row 5: Columns E to V empty cells with border
+                    for (let c = 5; c <= 22; c++) {
+                        const cell = ws.getCell(5, c);
+                        cell.value = '';
+                        cell.border = thinBorder;
+                    }
+
+                    // Row 6: Main headers
+                    const headers = ['#', 'Student No.', 'Name', 'Program'];
+                    for (let c = 1; c <= 4; c++) {
+                        const cell = ws.getCell(6, c);
+                        cell.value = headers[c - 1];
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF595959' }
+                        };
+                        cell.font = {
+                            name: 'Calibri',
+                            size: 10,
+                            bold: true,
+                            color: { argb: 'FFFFFFFF' }
+                        };
+                        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cell.border = thinBorder;
+                    }
+
+                    // Row 6: Columns E to V empty cells with border
+                    for (let c = 5; c <= 22; c++) {
+                        const cell = ws.getCell(6, c);
+                        cell.value = '';
+                        cell.border = thinBorder;
+                    }
+
+                    // Sort students alphabetically by name
+                    const sortedStudents = [...allStudents].sort((a, b) => {
+                        return (a.name || '').localeCompare(b.name || '');
+                    });
+
+                    // Rows 7+: Student records
+                    sortedStudents.forEach((student, index) => {
+                        const rowNum = 7 + index;
+                        const row = ws.getRow(rowNum);
+                        row.height = 19;
+
+                        // Col A: #
+                        const cellA = ws.getCell(rowNum, 1);
+                        cellA.value = index + 1;
+                        cellA.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cellA.font = { name: 'Calibri', size: 10 };
+                        cellA.border = thinBorder;
+
+                        // Col B: Student No.
+                        const cellB = ws.getCell(rowNum, 2);
+                        cellB.value = String(student.student_no || '');
+                        cellB.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cellB.font = { name: 'Calibri', size: 10 };
+                        cellB.border = thinBorder;
+                        cellB.numFmt = '@';
+
+                        // Col C: Name (Uppercase)
+                        const cellC = ws.getCell(rowNum, 3);
+                        cellC.value = String(student.name || '').toUpperCase();
+                        cellC.alignment = { vertical: 'middle', horizontal: 'left' };
+                        cellC.font = { name: 'Calibri', size: 10 };
+                        cellC.border = thinBorder;
+
+                        // Col D: Program (Uppercase)
+                        const cellD = ws.getCell(rowNum, 4);
+                        cellD.value = String(student.course || '').toUpperCase();
+                        cellD.alignment = { vertical: 'middle', horizontal: 'center' };
+                        cellD.font = { name: 'Calibri', size: 10 };
+                        cellD.border = thinBorder;
+
+                        // Cols E to V: 18 Attendance checkboxes
+                        for (let c = 5; c <= 22; c++) {
+                            const cellAtt = ws.getCell(rowNum, c);
+                            cellAtt.value = '';
+                            cellAtt.border = thinBorder;
+                        }
+                    });
+
+                    // Download the formatted XLSX file
+                    const buffer = await wb.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    const cleanSection = String(sectionName || 'Class').replace(/[^a-zA-Z0-9_-]/g, '_');
+                    link.download = `Class_Attendance_${cleanSection}.xlsx`;
+                    document.body.appendChild(link);
+                    link.click();
+
+                    setTimeout(() => {
+                        document.body.removeChild(link);
+                        window.URL.revokeObjectURL(downloadUrl);
+                    }, 250);
 
                     if (window.finishProgressModal) {
-                        window.finishProgressModal('Export Completed', 'Class roster Excel file generated and downloaded.', 'success');
+                        window.finishProgressModal('Export Completed', 'Class attendance Excel file generated and downloaded.', 'success');
                     }
-                }, 600);
+                } catch (err) {
+                    console.error('Export Error:', err);
+                    if (window.finishProgressModal) {
+                        window.finishProgressModal('Export Failed', 'An error occurred while generating the Excel file.', 'danger');
+                    } else if (typeof showAlertModal === 'function') {
+                        showAlertModal('Failed to generate attendance Excel file: ' + err.message, 'Export Error', 'danger');
+                    } else {
+                        alert('Failed to generate attendance Excel file: ' + err.message);
+                    }
+                }
             }
         </script>
     @endpush

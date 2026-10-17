@@ -1290,7 +1290,7 @@
                 // Check if target section exists in database
                 const existingSectionOptions = Array.from(document.querySelectorAll('#existingSectionsList option')).map(o => o.value.trim().toUpperCase());
                 if (existingSectionOptions.length > 0 && !existingSectionOptions.includes(targetSection.toUpperCase())) {
-                    alert(`The record is not on database. Section "${targetSection}" does not exist in the Sections & Students module. Please select an existing section.`);
+                    alert(`The records of students are not on masterlist. Please check the names or upload a new ones.`);
                     return;
                 }
 

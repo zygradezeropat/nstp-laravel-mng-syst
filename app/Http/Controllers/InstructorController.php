@@ -509,6 +509,19 @@ class InstructorController extends Controller
             ]
         );
 
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'New Activity Plan Submitted',
+                    'message' => "Instructor {$user->name} submitted activity plan \"{$plan->title}\" (" . ($plan->section?->section_name ?? 'Section') . ") for approval.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return back()->with('success', "Activity Plan '{$plan->title}' created successfully.");
     }
 
@@ -589,6 +602,19 @@ class InstructorController extends Controller
             ]
         );
 
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'Activity Plan Resubmitted',
+                    'message' => "Instructor {$user->name} resubmitted activity plan \"{$plan->title}\" for approval.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return back()->with('success', "Activity Plan '{$plan->title}' updated successfully.");
     }
 
@@ -635,10 +661,29 @@ class InstructorController extends Controller
         // Fetch assigned sections for the section dropdown in modal
         $sections = Section::where('instructor_id', $instructorId)->get();
 
-        // Fetch APPROVED plans for reports dropdown
-        $approvedPlans = ActivityPlan::where('instructor_id', $instructorId)
-            ->where('status', 'Approved')
+        // Fetch approved accomplishment reports to exclude already reported & approved plans
+        $approvedReports = AccomplishmentReport::where('instructor_id', $instructorId)
+            ->whereIn('status', ['Reviewed', 'Approved'])
             ->get();
+
+        // Fetch APPROVED plans for reports dropdown (excluding plans that already have an approved report)
+        $approvedPlans = ActivityPlan::with('section')
+            ->where('instructor_id', $instructorId)
+            ->where('status', 'Approved')
+            ->get()
+            ->filter(function ($plan) use ($approvedReports) {
+                return !$approvedReports->contains(function ($report) use ($plan) {
+                    $titleMatch = strcasecmp(trim($report->title), trim($plan->title)) === 0;
+                    if (!$titleMatch) {
+                        return false;
+                    }
+                    if ($report->section_id && $plan->section_id && $report->section_id != $plan->section_id) {
+                        return false;
+                    }
+                    return true;
+                });
+            })
+            ->values();
 
         return view('instructor.reports', compact('reports', 'sections', 'approvedPlans'));
     }
@@ -720,6 +765,19 @@ class InstructorController extends Controller
                 'role'     => 'instructor',
             ]
         );
+
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'New Accomplishment Report Submitted',
+                    'message' => "Instructor {$user->name} submitted accomplishment report \"{$report->title}\" (" . ($report->section?->section_name ?? 'Section') . ") for review.",
+                    'is_read' => false,
+                ]);
+            }
+        }
 
         return back()->with('success', "Accomplishment Report '{$report->title}' created successfully.");
     }
@@ -804,6 +862,19 @@ class InstructorController extends Controller
             ]
         );
 
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'Accomplishment Report Submitted',
+                    'message' => "Instructor {$user->name} submitted/updated accomplishment report \"{$report->title}\" for review.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return back()->with('success', "Accomplishment Report '{$report->title}' updated successfully.");
     }
 
@@ -838,34 +909,65 @@ class InstructorController extends Controller
         return back()->with('success', "Accomplishment Report '{$title}' deleted successfully.");
     }
 
-    /*
-    public function announcements(Request $request = null)
+    public function announcements(?Request $request = null)
     {
         $request = $request ?? request();
-        $query = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
-            ->orderByDesc('is_pinned')
-            ->orderByDesc('created_at');
+        $user = Auth::user();
+        $instructorId = $user->id;
 
-        if ($search = trim((string)$request->query('search'))) {
+        // Retrieve components of sections assigned to this instructor (from My Classes)
+        $assignedComponents = Section::where('instructor_id', $instructorId)
+            ->pluck('component')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Query only Activities restricted to this instructor's scopes/components
+        $query = Activity::query();
+
+        if (!empty($assignedComponents)) {
+            $query->whereIn('component', $assignedComponents);
+        } else {
+            // Instructor has no assigned component scope
+            $query->whereRaw('1 = 0');
+        }
+
+        // Optional filter by specific component if instructor has multiple scopes
+        $selectedComponent = $request->query('component');
+        if ($selectedComponent && in_array(strtoupper($selectedComponent), $assignedComponents)) {
+            $query->where('component', strtoupper($selectedComponent));
+        }
+
+        // Search filter
+        $search = trim((string)$request->query('search'));
+        if ($search) {
             $query->where(function ($q) use ($search) {
                 $q->where('title', 'like', "%{$search}%")
-                  ->orWhere('content', 'like', "%{$search}%")
-                  ->orWhere('source', 'like', "%{$search}%");
+                  ->orWhere('description', 'like', "%{$search}%")
+                  ->orWhere('location', 'like', "%{$search}%");
             });
         }
 
-        $announcements = $query->paginate(10)->withQueryString();
+        $activities = $query->orderByDesc('activity_date')
+            ->orderByDesc('activity_time')
+            ->paginate(10)
+            ->withQueryString();
 
-        return view('instructor.announcements', compact('announcements'));
+        $today = now()->startOfDay();
+        $upcomingCount = !empty($assignedComponents)
+            ? Activity::whereIn('component', $assignedComponents)->where('activity_date', '>=', $today)->count()
+            : 0;
+
+        return view('instructor.announcements', compact('activities', 'assignedComponents', 'selectedComponent', 'upcomingCount', 'search'));
     }
-    */
 
     public function calendar(Request $request)
     {
         $instructorId = Auth::id();
         $year = $request->query('year', now()->year);
         $month = $request->query('month', now()->month);
-        $selectedComponent = $request->query('component', 'all');
+        $selectedComponent = $request->query('component');
 
         // Retrieve components of sections assigned to this instructor
         $assignedComponents = Section::where('instructor_id', $instructorId)
@@ -875,39 +977,96 @@ class InstructorController extends Controller
             ->values()
             ->toArray();
 
+        // Validate and normalize $selectedComponent
+        if (empty($assignedComponents)) {
+            $selectedComponent = null;
+        } elseif (count($assignedComponents) === 1) {
+            $selectedComponent = $assignedComponents[0];
+        } else {
+            // Multiple assigned components
+            if (!$selectedComponent || !in_array($selectedComponent, $assignedComponents)) {
+                $selectedComponent = 'all';
+            }
+        }
+
         $defaultComponent = !empty($assignedComponents) ? $assignedComponents[0] : 'CWTS';
 
         $selectedMonth = \Carbon\Carbon::createFromDate($year, $month, 1);
         $currentMonthStart = $selectedMonth->copy()->startOfMonth();
         $currentMonthEnd = $selectedMonth->copy()->endOfMonth();
 
-        // 1. Fetch global activities in current month
-        $activitiesDb = Activity::whereBetween('activity_date', [$currentMonthStart, $currentMonthEnd])->get();
+        // 1. Fetch activities in current month strictly scoped to instructor's assignment
+        $activitiesQuery = Activity::whereBetween('activity_date', [$currentMonthStart, $currentMonthEnd]);
+
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $activitiesQuery->where('component', $selectedComponent);
+            } else {
+                $activitiesQuery->whereIn('component', $assignedComponents);
+            }
+        } else {
+            $activitiesQuery->whereRaw('1 = 0');
+        }
+
+        $activitiesDb = $activitiesQuery->get();
 
         // 2. Fetch approved activity plans of this instructor in current month
-        $approvedPlans = ActivityPlan::with('section')
+        $plansQuery = ActivityPlan::with('section')
             ->where('instructor_id', $instructorId)
             ->where('status', 'Approved')
-            ->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
-            ->get();
+            ->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd]);
 
-        // 3. Fetch announcements relevant to instructors in current month
-        $announcementsDb = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $plansQuery->whereHas('section', function ($q) use ($selectedComponent) {
+                    $q->where('component', $selectedComponent);
+                });
+            } else {
+                $plansQuery->whereHas('section', function ($q) use ($assignedComponents) {
+                    $q->whereIn('component', $assignedComponents);
+                });
+            }
+        } else {
+            $plansQuery->whereRaw('1 = 0');
+        }
+
+        $approvedPlans = $plansQuery->get();
+
+        // 3. Fetch announcements relevant to instructors in current month (filtered by assigned components)
+        $announcementsQuery = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
             ->where(function ($q) use ($currentMonthStart, $currentMonthEnd) {
                 $q->whereBetween('scheduled_date', [$currentMonthStart, $currentMonthEnd])
                   ->orWhere(function ($q2) use ($currentMonthStart, $currentMonthEnd) {
                       $q2->whereNull('scheduled_date')
                          ->whereBetween('created_at', [$currentMonthStart, $currentMonthEnd]);
                   });
-            })->get();
+            });
 
-        // 4. Merge them into a single raw collection
-        $rawActivities = collect();
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $announcementsQuery->where(function ($q) use ($selectedComponent) {
+                    $q->where('component', $selectedComponent)
+                      ->orWhereNull('component');
+                });
+            } else {
+                $announcementsQuery->where(function ($q) use ($assignedComponents) {
+                    $q->whereIn('component', $assignedComponents)
+                      ->orWhereNull('component');
+                });
+            }
+        } else {
+            $announcementsQuery->whereRaw('1 = 0');
+        }
+
+        $announcementsDb = $announcementsQuery->get();
+
+        // 4. Merge them into a single collection
+        $activities = collect();
 
         foreach ($activitiesDb as $act) {
-            $rawActivities->push((object)[
+            $activities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component ?? 'General',
+                'component' => $act->component,
                 'activity_date' => $act->activity_date,
                 'location' => $act->location ?? 'TBA',
                 'description' => $act->description ?? '',
@@ -917,14 +1076,14 @@ class InstructorController extends Controller
         }
 
         foreach ($approvedPlans as $plan) {
-            $exists = $rawActivities->contains(function ($existing) use ($plan) {
+            $exists = $activities->contains(function ($existing) use ($plan) {
                 return strtolower($existing->title) === strtolower($plan->title) &&
                        $existing->activity_date->toDateString() === $plan->scheduled_date->toDateString();
             });
 
             if (!$exists) {
                 $comp = $plan->section?->component ?? $defaultComponent;
-                $rawActivities->push((object)[
+                $activities->push((object)[
                     'title' => $plan->title,
                     'component' => $comp,
                     'activity_date' => $plan->scheduled_date,
@@ -938,9 +1097,9 @@ class InstructorController extends Controller
 
         foreach ($announcementsDb as $ann) {
             $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
-            $rawActivities->push((object)[
+            $activities->push((object)[
                 'title' => $ann->title,
-                'component' => $ann->component ?? 'General',
+                'component' => $ann->component ?? $defaultComponent,
                 'activity_date' => $date,
                 'location' => $ann->source ?? 'NSTP Office',
                 'description' => $ann->content,
@@ -951,53 +1110,67 @@ class InstructorController extends Controller
             ]);
         }
 
-        // 5. Filter merged activities based on $selectedComponent
-        $activities = $rawActivities->filter(function ($act) use ($selectedComponent, $assignedComponents) {
-            $actCompUpper = strtoupper(trim($act->component));
-            $selUpper = strtoupper(trim($selectedComponent));
-
-            if ($selUpper === 'ALL') {
-                if (!empty($assignedComponents)) {
-                    $assignedUpper = array_map('strtoupper', $assignedComponents);
-                    return in_array($actCompUpper, $assignedUpper) || in_array($actCompUpper, ['GENERAL', 'ALL']);
-                }
-                return true;
+        // 5. Fetch upcoming activities & announcements for sidebar (starting from today)
+        $upcomingDbQuery = Activity::where('activity_date', '>=', now()->startOfDay());
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $upcomingDbQuery->where('component', $selectedComponent);
+            } else {
+                $upcomingDbQuery->whereIn('component', $assignedComponents);
             }
+        } else {
+            $upcomingDbQuery->whereRaw('1 = 0');
+        }
+        $upcomingDb = $upcomingDbQuery->orderBy('activity_date', 'asc')->limit(10)->get();
 
-            if ($selUpper === 'GENERAL') {
-                return in_array($actCompUpper, ['GENERAL', 'ALL']);
-            }
-
-            return $actCompUpper === $selUpper;
-        })->values();
-
-        // 6. Fetch upcoming activities & announcements for sidebar (starting from today)
-        $upcomingDb = Activity::where('activity_date', '>=', now()->startOfDay())
-            ->orderBy('activity_date', 'asc')
-            ->limit(10)
-            ->get();
-
-        $upcomingPlans = ActivityPlan::with('section')
+        $upcomingPlansQuery = ActivityPlan::with('section')
             ->where('instructor_id', $instructorId)
             ->where('status', 'Approved')
-            ->where('scheduled_date', '>=', now()->startOfDay())
-            ->orderBy('scheduled_date', 'asc')
-            ->limit(10)
-            ->get();
+            ->where('scheduled_date', '>=', now()->startOfDay());
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $upcomingPlansQuery->whereHas('section', function ($q) use ($selectedComponent) {
+                    $q->where('component', $selectedComponent);
+                });
+            } else {
+                $upcomingPlansQuery->whereHas('section', function ($q) use ($assignedComponents) {
+                    $q->whereIn('component', $assignedComponents);
+                });
+            }
+        } else {
+            $upcomingPlansQuery->whereRaw('1 = 0');
+        }
+        $upcomingPlans = $upcomingPlansQuery->orderBy('scheduled_date', 'asc')->limit(10)->get();
 
-        $upcomingAnn = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
+        $upcomingAnnQuery = Announcement::whereIn('target_role', ['All', 'Instructors', 'Instructor'])
             ->where(function ($q) {
                 $q->where('scheduled_date', '>=', now()->startOfDay())
                   ->orWhere(function ($q2) {
                       $q2->whereNull('scheduled_date')
                          ->where('created_at', '>=', now()->startOfDay());
                   });
-            })->limit(5)->get();
+            });
+        if (!empty($assignedComponents)) {
+            if ($selectedComponent && $selectedComponent !== 'all' && in_array($selectedComponent, $assignedComponents)) {
+                $upcomingAnnQuery->where(function ($q) use ($selectedComponent) {
+                    $q->where('component', $selectedComponent)
+                      ->orWhereNull('component');
+                });
+            } else {
+                $upcomingAnnQuery->where(function ($q) use ($assignedComponents) {
+                    $q->whereIn('component', $assignedComponents)
+                      ->orWhereNull('component');
+                });
+            }
+        } else {
+            $upcomingAnnQuery->whereRaw('1 = 0');
+        }
+        $upcomingAnn = $upcomingAnnQuery->limit(5)->get();
 
         $rawUpcoming = collect();
 
         foreach ($upcomingDb as $act) {
-            $comp = $act->component ?? 'General';
+            $comp = $act->component;
             $rawUpcoming->push((object)[
                 'title' => $act->title,
                 'component' => $comp,
@@ -1006,11 +1179,11 @@ class InstructorController extends Controller
                 'description' => $act->description ?? '',
                 'is_plan' => false,
                 'is_announcement' => false,
-                'color' => match(strtoupper($comp)) {
+                'color' => match(strtoupper((string)$comp)) {
                     'CWTS' => 'bg-indigo-500',
                     'LTS' => 'bg-emerald-500',
                     'ROTC' => 'bg-rose-500',
-                    default => 'bg-blue-500',
+                    default => 'bg-indigo-500',
                 },
             ]);
         }
@@ -1031,11 +1204,11 @@ class InstructorController extends Controller
                     'description' => $plan->objectives ?? $plan->description ?? '',
                     'is_plan' => true,
                     'is_announcement' => false,
-                    'color' => match(strtoupper($comp)) {
+                    'color' => match(strtoupper((string)$comp)) {
                         'CWTS' => 'bg-indigo-500',
                         'LTS' => 'bg-emerald-500',
                         'ROTC' => 'bg-rose-500',
-                        default => 'bg-emerald-500',
+                        default => 'bg-indigo-500',
                     },
                 ]);
             }
@@ -1045,7 +1218,7 @@ class InstructorController extends Controller
             $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
             $rawUpcoming->push((object)[
                 'title' => $ann->title,
-                'component' => $ann->component ?? 'General',
+                'component' => $ann->component ?? $defaultComponent,
                 'activity_date' => $date,
                 'location' => $ann->source ?? 'NSTP Office',
                 'description' => $ann->content,
@@ -1057,24 +1230,7 @@ class InstructorController extends Controller
             ]);
         }
 
-        $upcomingActivities = $rawUpcoming->filter(function ($act) use ($selectedComponent, $assignedComponents) {
-            $actCompUpper = strtoupper(trim($act->component));
-            $selUpper = strtoupper(trim($selectedComponent));
-
-            if ($selUpper === 'ALL') {
-                if (!empty($assignedComponents)) {
-                    $assignedUpper = array_map('strtoupper', $assignedComponents);
-                    return in_array($actCompUpper, $assignedUpper) || in_array($actCompUpper, ['GENERAL', 'ALL']);
-                }
-                return true;
-            }
-
-            if ($selUpper === 'GENERAL') {
-                return in_array($actCompUpper, ['GENERAL', 'ALL']);
-            }
-
-            return $actCompUpper === $selUpper;
-        })->sortBy('activity_date')->take(5)->values();
+        $upcomingActivities = $rawUpcoming->sortBy('activity_date')->take(5)->values();
 
         // Precompute navigation months
         $prevMonth = $selectedMonth->copy()->subMonth();

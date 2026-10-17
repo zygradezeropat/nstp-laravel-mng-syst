@@ -15,12 +15,12 @@ class NotificationController extends Controller
      */
     public function index(Request $request): JsonResponse
     {
+        $user = auth()->user();
         $email = $request->query('email');
-        if (!$email) {
-            return response()->json([]);
+        if ($email) {
+            $user = PortalUser::where('email', $email)->first() ?? $user;
         }
 
-        $user = PortalUser::where('email', $email)->first();
         if (!$user) {
             return response()->json([]);
         }
@@ -34,7 +34,7 @@ class NotificationController extends Controller
                 'type'       => $n->type,
                 'title'      => $n->title,
                 'message'    => $n->message,
-                'is_read'    => $n->is_read,
+                'is_read'    => (bool)$n->is_read,
                 'created_at' => $n->created_at?->diffForHumans() ?? '',
             ]);
 
@@ -59,12 +59,12 @@ class NotificationController extends Controller
      */
     public function markAllRead(Request $request): JsonResponse
     {
+        $user = auth()->user();
         $email = $request->query('email');
-        if (!$email) {
-            return response()->json(['success' => false], 422);
+        if ($email) {
+            $user = PortalUser::where('email', $email)->first() ?? $user;
         }
 
-        $user = PortalUser::where('email', $email)->first();
         if (!$user) {
             return response()->json(['success' => false], 404);
         }

@@ -90,8 +90,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/reports', [\App\Http\Controllers\InstructorController::class, 'storeReport'])->name('reports.store');
         Route::put('/reports/{id}', [\App\Http\Controllers\InstructorController::class, 'updateReport'])->name('reports.update');
         Route::delete('/reports/{id}', [\App\Http\Controllers\InstructorController::class, 'deleteReport'])->name('reports.delete');
-        // Announcement Module Route (Disabled)
-        // Route::get('/announcements', [\App\Http\Controllers\InstructorController::class, 'announcements'])->name('announcements');
+        // Announcement Module Route (Activities restricted to instructor scope)
+        Route::get('/announcements', [\App\Http\Controllers\InstructorController::class, 'announcements'])->name('announcements');
         Route::get('/calendar', [\App\Http\Controllers\InstructorController::class, 'calendar'])->name('calendar');
     });
 

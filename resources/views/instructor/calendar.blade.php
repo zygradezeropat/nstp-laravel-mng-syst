@@ -6,27 +6,34 @@
 
 <x-page-header title="Activity Calendar" subtitle="Schedule of classes, official activities, and campus notices">
     <x-slot name="actions">
-        <!-- Component Filter Tabs -->
-        <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
-            @php
-                $filters = [
-                    'all' => 'All Components',
-                    'CWTS' => 'CWTS',
-                    'LTS' => 'LTS',
-                    'ROTC' => 'ROTC',
-                    'General' => 'General',
-                ];
-            @endphp
-            @foreach($filters as $key => $label)
-                @php
-                    $isActive = ($selectedComponent ?? 'all') === $key;
-                @endphp
-                <a href="{{ route('instructor.calendar', ['month' => $selectedMonth->month, 'year' => $selectedMonth->year, 'component' => $key]) }}"
-                   class="px-3 py-1.5 rounded-lg transition-all duration-150 {{ $isActive ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50' }}">
-                    {{ $label }}
+        @if(count($assignedComponents) > 1)
+            <!-- Component Filter Tabs (Only shown if instructor handles multiple programs) -->
+            <div class="flex items-center gap-1.5 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs font-semibold">
+                <a href="{{ route('instructor.calendar', ['month' => $selectedMonth->month, 'year' => $selectedMonth->year, 'component' => 'all']) }}"
+                   class="px-3 py-1.5 rounded-lg transition-all duration-150 {{ ($selectedComponent === 'all' || empty($selectedComponent)) ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50' }}">
+                    All Assigned
                 </a>
-            @endforeach
-        </div>
+                @foreach($assignedComponents as $comp)
+                    @php
+                        $isActive = ($selectedComponent === $comp);
+                    @endphp
+                    <a href="{{ route('instructor.calendar', ['month' => $selectedMonth->month, 'year' => $selectedMonth->year, 'component' => $comp]) }}"
+                       class="px-3 py-1.5 rounded-lg transition-all duration-150 {{ $isActive ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-white/50' }}">
+                        {{ $comp }}
+                    </a>
+                @endforeach
+            </div>
+        @elseif(count($assignedComponents) === 1)
+            <!-- Assigned Program Badge (No tabbars when instructor handles a single program) -->
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-700 shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                Assigned Program: {{ $assignedComponents[0] }}
+            </div>
+        @else
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-500">
+                No Program Assigned
+            </div>
+        @endif
     </x-slot>
 </x-page-header>
 
@@ -37,7 +44,7 @@
                 <div>
                     <h3 class="text-lg font-bold text-slate-800">{{ $selectedMonth->format('F Y') }}</h3>
                     @if(!empty($assignedComponents))
-                        <p class="text-xs text-slate-400 mt-0.5">Assigned Components: <span class="font-bold text-slate-600">{{ implode(', ', $assignedComponents) }}</span></p>
+                        <p class="text-xs text-slate-400 mt-0.5">{{ count($assignedComponents) > 1 ? 'Assigned Programs' : 'Assigned Program' }}: <span class="font-bold text-slate-600">{{ implode(', ', $assignedComponents) }}</span></p>
                     @endif
                 </div>
                 <div class="flex items-center gap-2">
@@ -85,17 +92,17 @@
                                 @endif
                             </div>
                             <div class="space-y-1">
-                                @foreach($visibleActivities as $act)
+                                 @foreach($visibleActivities as $act)
                                     @php
                                         if (!empty($act->is_announcement)) {
                                             $colorClass = 'bg-amber-500 text-white border-l-2 border-amber-700 hover:bg-amber-600 font-bold';
                                             $pillText = '📢 ' . $act->title;
                                         } else {
-                                            $colorClass = match($act->component ?? 'General') {
+                                            $colorClass = match(strtoupper($act->component ?? '')) {
                                                 'CWTS' => 'bg-indigo-600 text-white border-l-2 border-indigo-700 hover:bg-indigo-700',
                                                 'LTS' => 'bg-emerald-600 text-white border-l-2 border-emerald-700 hover:bg-emerald-700',
                                                 'ROTC' => 'bg-rose-500 text-white border-l-2 border-rose-600 hover:bg-rose-600',
-                                                default => 'bg-blue-600 text-white hover:bg-blue-700 border-l-2 border-blue-700'
+                                                default => 'bg-indigo-600 text-white hover:bg-indigo-700 border-l-2 border-indigo-700'
                                             };
                                             $pillText = $act->title;
                                         }
@@ -103,7 +110,7 @@
                                     <div class="text-[10px] px-2 py-1 rounded truncate {{ $colorClass }} font-semibold tracking-tight shadow-sm cursor-pointer hover:shadow transition-all duration-150 active:scale-95"
                                          onclick="event.stopPropagation(); openViewEventModal(this)"
                                          data-title="{{ $act->title }}"
-                                         data-component="{{ $act->component ?? 'General' }}"
+                                         data-component="{{ $act->component }}"
                                          data-date="{{ $act->activity_date?->format('F d, Y') }}"
                                          data-location="{{ $act->location ?? 'TBA' }}"
                                          data-description="{{ $act->description ?? 'No detailed description provided.' }}"
@@ -134,7 +141,7 @@
                 <li class="p-4 hover:bg-slate-50 transition cursor-pointer flex items-center justify-between gap-3"
                     onclick="openViewEventModal(this)"
                     data-title="{{ $a->title }}"
-                    data-component="{{ $a->component ?? 'General' }}"
+                    data-component="{{ $a->component }}"
                     data-date="{{ $a->activity_date?->format('F d, Y') }}"
                     data-location="{{ $a->location ?? 'TBA' }}"
                     data-description="{{ $a->description ?? 'No detailed description provided.' }}"
@@ -158,8 +165,8 @@
                     @if(!empty($a->is_announcement))
                         <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">ANNOUNCEMENT</span>
                     @else
-                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 {{ match($a->component ?? 'General') { 'CWTS' => 'bg-indigo-50 text-indigo-700 border border-indigo-200', 'LTS' => 'bg-emerald-50 text-emerald-700 border border-emerald-200', 'ROTC' => 'bg-rose-50 text-rose-700 border border-rose-200', default => 'bg-blue-50 text-blue-700 border border-blue-200' } }}">
-                            {{ $a->component ?? 'General' }}
+                        <span class="text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 {{ match(strtoupper($a->component ?? '')) { 'CWTS' => 'bg-indigo-50 text-indigo-700 border border-indigo-200', 'LTS' => 'bg-emerald-50 text-emerald-700 border border-emerald-200', 'ROTC' => 'bg-rose-50 text-rose-700 border border-rose-200', default => 'bg-indigo-50 text-indigo-700 border border-indigo-200' } }}">
+                            {{ $a->component }}
                         </span>
                     @endif
                 </li>
@@ -283,11 +290,11 @@
             `;
         } else {
             events.forEach((act) => {
-                const comp = act.component || 'General';
+                const comp = act.component || '';
                 const isAnn = Boolean(act.is_announcement);
                 const isPlan = Boolean(act.is_plan);
 
-                let badgeClass = 'bg-blue-50 text-blue-700 border-blue-200';
+                let badgeClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
                 if (isAnn) {
                     badgeClass = 'bg-amber-100 text-amber-800 border-amber-300 font-extrabold';
                 } else if (comp === 'ROTC') {
@@ -334,7 +341,7 @@
 
     window.openViewEventModalFromObj = function(act) {
         const title = act.title || 'Event Details';
-        const component = act.component || 'General';
+        const component = act.component || '';
         const dateStr = act.activity_date;
         let dateFormatted = 'TBA';
         if (dateStr) {
@@ -369,10 +376,8 @@
             header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600 text-white';
         } else if (component === 'ROTC') {
             header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-rose-600 to-red-600 text-white';
-        } else if (component === 'CWTS') {
-            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600 text-white';
         } else {
-            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 text-white';
+            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600 text-white';
         }
 
         document.getElementById('viewEventOverlay').classList.remove('hidden');
@@ -380,7 +385,7 @@
 
     window.openViewEventModal = function(element) {
         const title = element.getAttribute('data-title') || 'Event Details';
-        const component = element.getAttribute('data-component') || 'General';
+        const component = element.getAttribute('data-component') || '';
         const date = element.getAttribute('data-date') || 'TBA';
         const location = element.getAttribute('data-location') || 'TBA';
         const description = element.getAttribute('data-description') || 'No detailed description provided.';
@@ -405,10 +410,8 @@
             header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-emerald-600 to-teal-600 text-white';
         } else if (component === 'ROTC') {
             header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-rose-600 to-red-600 text-white';
-        } else if (component === 'CWTS') {
-            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600 text-white';
         } else {
-            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 text-white';
+            header.className = 'px-6 py-5 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-blue-600 text-white';
         }
 
         document.getElementById('viewEventOverlay').classList.remove('hidden');

@@ -169,7 +169,6 @@
                         <label class="text-xs text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">Program Component <span class="text-rose-500">*</span></label>
                         <select name="component" required class="w-full px-3 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-4 focus:ring-indigo-100 focus:border-indigo-300 transition">
                             <option value="" disabled selected>Select Component</option>
-                            <option value="General">GENERAL</option>
                             <option value="CWTS">CWTS</option>
                             <option value="LTS">LTS</option>
                             <option value="ROTC">ROTC</option>

@@ -68,6 +68,20 @@ class ActivityPlanController extends Controller
             'submitted_date' => now(),
         ]));
 
+        if ($plan->status === 'Pending') {
+            $user = auth()->user() ?? $plan->instructor;
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'Activity Plan Submitted',
+                    'message' => ($user ? "{$user->name} submitted " : "New ") . "activity plan \"{$plan->title}\" for approval.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return response()->json(['success' => true, 'plan' => $plan], 201);
     }
 

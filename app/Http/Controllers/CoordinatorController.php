@@ -540,8 +540,8 @@ class CoordinatorController extends Controller
         \App\Models\PortalNotification::create([
             'user_id' => $report->instructor_id,
             'type'    => 'system',
-            'title'   => 'Accomplishment Report Reviewed',
-            'message' => "Your accomplishment report \"{$report->title}\" has been reviewed and accepted." . ($request->feedback ? " Coordinator feedback: \"{$request->feedback}\"" : ""),
+            'title'   => 'Accomplishment Report Approved',
+            'message' => "Your accomplishment report \"{$report->title}\" has been reviewed and approved." . ($request->feedback ? " Coordinator feedback: \"{$request->feedback}\"" : ""),
             'is_read' => false,
         ]);
 
@@ -730,7 +730,7 @@ class CoordinatorController extends Controller
         foreach ($activitiesDb as $act) {
             $activities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component ?? 'General',
+                'component' => $act->component ?? 'CWTS',
                 'activity_date' => $act->activity_date,
                 'location' => $act->location ?? 'TBA',
                 'description' => $act->description ?? '',
@@ -762,7 +762,7 @@ class CoordinatorController extends Controller
             $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
             $activities->push((object)[
                 'title' => $ann->title,
-                'component' => $ann->component ?? 'General',
+                'component' => $ann->component ?? 'CWTS',
                 'activity_date' => $date,
                 'location' => $ann->source ?? 'NSTP Office',
                 'description' => $ann->content,
@@ -798,7 +798,7 @@ class CoordinatorController extends Controller
         foreach ($upcomingDb as $act) {
             $upcomingActivities->push((object)[
                 'title' => $act->title,
-                'component' => $act->component ?? 'General',
+                'component' => $act->component ?? 'CWTS',
                 'activity_date' => $act->activity_date,
                 'location' => $act->location ?? 'TBA',
                 'description' => $act->description ?? '',
@@ -828,7 +828,7 @@ class CoordinatorController extends Controller
             $date = $ann->scheduled_date ? $ann->scheduled_date : $ann->created_at;
             $upcomingActivities->push((object)[
                 'title' => $ann->title,
-                'component' => $ann->component ?? 'General',
+                'component' => $ann->component ?? 'CWTS',
                 'activity_date' => $date,
                 'location' => $ann->source ?? 'NSTP Office',
                 'description' => $ann->content,

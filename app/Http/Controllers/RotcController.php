@@ -608,6 +608,19 @@ class RotcController extends Controller
             ]
         );
 
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'ROTC Activity Design Submitted',
+                    'message' => "Officer {$user->name} submitted training design brief \"{$plan->title}\" (" . ($plan->section?->section_name ?? 'ROTC') . ") for approval.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return back()->with('success', "Activity Design Brief '{$plan->title}' successfully submitted.");
     }
 
@@ -865,7 +878,19 @@ class RotcController extends Controller
 
         $sections = Section::where('component', 'ROTC')->get();
         
-        $approvedPlans = ActivityPlan::where(function ($query) {
+        // Fetch approved accomplishment reports to exclude already reported & approved plans
+        $approvedReports = AccomplishmentReport::where(function ($query) {
+                $query->whereHas('section', fn($q) => $q->where('component', 'ROTC'))
+                      ->orWhere(function ($q) {
+                          $q->whereHas('section', fn($s) => $s->where('section_name', 'All Section'))
+                            ->whereHas('instructor', fn($u) => $u->where('role', 'rotc')->orWhere('dept', 'ROTC'));
+                      });
+            })
+            ->whereIn('status', ['Reviewed', 'Approved'])
+            ->get();
+
+        $approvedPlans = ActivityPlan::with('section')
+            ->where(function ($query) {
                 $query->whereHas('section', fn($q) => $q->where('component', 'ROTC'))
                       ->orWhere(function ($q) {
                           $q->whereHas('section', fn($s) => $s->where('section_name', 'All Section'))
@@ -873,7 +898,20 @@ class RotcController extends Controller
                       });
             })
             ->where('status', 'Approved')
-            ->get();
+            ->get()
+            ->filter(function ($plan) use ($approvedReports) {
+                return !$approvedReports->contains(function ($report) use ($plan) {
+                    $titleMatch = strcasecmp(trim($report->title), trim($plan->title)) === 0;
+                    if (!$titleMatch) {
+                        return false;
+                    }
+                    if ($report->section_id && $plan->section_id && $report->section_id != $plan->section_id) {
+                        return false;
+                    }
+                    return true;
+                });
+            })
+            ->values();
 
         return view('rotc.reports', compact('reports', 'sections', 'approvedPlans'));
     }
@@ -965,6 +1003,19 @@ class RotcController extends Controller
             ]
         );
 
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'ROTC Accomplishment Report Submitted',
+                    'message' => "Officer {$user->name} updated/resubmitted accomplishment report \"{$report->title}\" for review.",
+                    'is_read' => false,
+                ]);
+            }
+        }
+
         return back()->with('success', "Accomplishment Report '{$report->title}' successfully updated.");
     }
 
@@ -1036,6 +1087,19 @@ class RotcController extends Controller
                 'role'     => 'rotc',
             ]
         );
+
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'New ROTC Accomplishment Report Submitted',
+                    'message' => "Officer {$user->name} submitted accomplishment report \"{$report->title}\" (" . ($report->section?->section_name ?? 'ROTC') . ") for review.",
+                    'is_read' => false,
+                ]);
+            }
+        }
 
         return back()->with('success', "Accomplishment Report '{$report->title}' successfully submitted.");
     }
@@ -1152,6 +1216,19 @@ class RotcController extends Controller
                 'role'     => 'rotc',
             ]
         );
+
+        if ($data['status'] === 'Pending') {
+            $coordinators = PortalUser::where('role', 'coordinator')->get();
+            foreach ($coordinators as $coord) {
+                \App\Models\PortalNotification::create([
+                    'user_id' => $coord->id,
+                    'type'    => 'submission',
+                    'title'   => 'ROTC Activity Design Submitted',
+                    'message' => "Officer {$user->name} resubmitted training design brief \"{$plan->title}\" (" . ($plan->section?->section_name ?? 'ROTC') . ") for approval.",
+                    'is_read' => false,
+                ]);
+            }
+        }
 
         return back()->with('success', "Activity Design Brief '{$plan->title}' successfully updated.");
     }
